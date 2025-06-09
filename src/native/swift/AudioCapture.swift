@@ -72,7 +72,7 @@ import AVFoundation
             return true
             
         } catch {
-            print("Failed to start recording: \\(error.localizedDescription)")
+            print("Failed to start recording: \(error.localizedDescription)")
             cleanup()
             return false
         }
@@ -115,26 +115,25 @@ import AVFoundation
     
     private func setupAudioFile() throws {
         // Create output file
-        let fileName = "recording_\\(Date().timeIntervalSince1970).wav"
+        let fileName = "recording_\(Date().timeIntervalSince1970).wav"
         currentRecordingURL = outputDirectory.appendingPathComponent(fileName)
         
         guard let url = currentRecordingURL else {
             throw AudioCaptureError.fileCreationFailed
         }
         
-        // Use a standard format that works well
-        let settings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: 44100.0,
-            AVNumberOfChannelsKey: 2,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsBigEndianKey: false
-        ]
+        guard let audioEngine = audioEngine else {
+            throw AudioCaptureError.setupIncomplete
+        }
         
-        audioFile = try AVAudioFile(forWriting: url, settings: settings)
+        // Get the input node's format to ensure compatibility
+        let inputFormat = audioEngine.inputNode.outputFormat(forBus: 0)
         
-        print("Audio file setup complete: \\(fileName)")
+        // Create audio file with the same format as input
+        audioFile = try AVAudioFile(forWriting: url, settings: inputFormat.settings)
+        
+        print("Audio file setup complete: \(fileName)")
+        print("Input format: \(inputFormat)")
     }
     
     private func startRecording() throws {
@@ -144,14 +143,14 @@ import AVFoundation
         }
         
         let inputNode = audioEngine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        let inputFormat = inputNode.outputFormat(forBus: 0)
         
-        // Install tap on input node
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { (buffer, time) in
+        // Install tap on input node with the input format
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { (buffer, time) in
             do {
                 try audioFile.write(from: buffer)
             } catch {
-                print("Error writing audio buffer: \\(error)")
+                print("Error writing audio buffer: \(error.localizedDescription)")
             }
         }
         

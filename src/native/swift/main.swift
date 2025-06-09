@@ -56,7 +56,7 @@ class AudioCaptureApp {
     
     private func stopRecording() {
         if let filePath = audioCapture.stopRecording() {
-            print("Recording stopped. File saved to: \\(filePath)")
+            print("Recording stopped. File saved to: \(filePath)")
         } else {
             print("No active recording to stop")
         }
@@ -72,7 +72,7 @@ class AudioCaptureApp {
     private func stop() {
         isRunning = false
         if let filePath = audioCapture.stopRecording() {
-            print("Recording stopped. File saved to: \\(filePath)")
+            print("Recording stopped. File saved to: \(filePath)")
         }
         exit(0)
     }
