@@ -1,0 +1,192 @@
+import Foundation
+import CoreAudio
+import AudioToolbox
+import AVFoundation
+
+@objc public class AudioCapture: NSObject {
+    private var audioEngine: AVAudioEngine?
+    private var audioFile: AVAudioFile?
+    private var isRecording = false
+    
+    private let outputDirectory: URL
+    private var currentRecordingURL: URL?
+    
+    public override init() {
+        // Set up output directory using temporary directory for now
+        let tempDir = FileManager.default.temporaryDirectory
+        self.outputDirectory = tempDir.appendingPathComponent("TranscriperAudio", isDirectory: true)
+        
+        super.init()
+        
+        // Create output directory if it doesn't exist
+        try? FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+    }
+    
+    deinit {
+        _ = stopRecording()
+        cleanup()
+    }
+    
+    @objc public func requestPermissions() -> Bool {
+        // Check if we have microphone permission
+        let microphoneStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        
+        switch microphoneStatus {
+        case .authorized:
+            return true
+        case .notDetermined:
+            // Request permission synchronously
+            var granted = false
+            let semaphore = DispatchSemaphore(value: 0)
+            
+            AVCaptureDevice.requestAccess(for: .audio) { isGranted in
+                granted = isGranted
+                semaphore.signal()
+            }
+            
+            semaphore.wait()
+            return granted
+        default:
+            return false
+        }
+    }
+    
+    @objc public func startSystemAudioRecording() -> Bool {
+        guard !isRecording else {
+            print("Already recording")
+            return false
+        }
+        
+        guard requestPermissions() else {
+            print("Audio permissions not granted")
+            return false
+        }
+        
+        do {
+            try setupAudioEngine()
+            try setupAudioFile()
+            try startRecording()
+            
+            isRecording = true
+            print("Audio recording started successfully")
+            return true
+            
+        } catch {
+            print("Failed to start recording: \\(error.localizedDescription)")
+            cleanup()
+            return false
+        }
+    }
+    
+    @objc public func stopRecording() -> String? {
+        guard isRecording else {
+            return nil
+        }
+        
+        isRecording = false
+        
+        // Stop audio engine
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        
+        // Close audio file
+        audioFile = nil
+        
+        print("Recording stopped")
+        
+        return currentRecordingURL?.path
+    }
+    
+    @objc public func isCurrentlyRecording() -> Bool {
+        return isRecording
+    }
+    
+    // MARK: - Private Methods
+    
+    private func setupAudioEngine() throws {
+        audioEngine = AVAudioEngine()
+        
+        guard audioEngine != nil else {
+            throw AudioCaptureError.engineCreationFailed
+        }
+        
+        print("Audio engine setup complete")
+    }
+    
+    private func setupAudioFile() throws {
+        // Create output file
+        let fileName = "recording_\\(Date().timeIntervalSince1970).wav"
+        currentRecordingURL = outputDirectory.appendingPathComponent(fileName)
+        
+        guard let url = currentRecordingURL else {
+            throw AudioCaptureError.fileCreationFailed
+        }
+        
+        // Use a standard format that works well
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 44100.0,
+            AVNumberOfChannelsKey: 2,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false
+        ]
+        
+        audioFile = try AVAudioFile(forWriting: url, settings: settings)
+        
+        print("Audio file setup complete: \\(fileName)")
+    }
+    
+    private func startRecording() throws {
+        guard let audioEngine = audioEngine,
+              let audioFile = audioFile else {
+            throw AudioCaptureError.setupIncomplete
+        }
+        
+        let inputNode = audioEngine.inputNode
+        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        
+        // Install tap on input node
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { (buffer, time) in
+            do {
+                try audioFile.write(from: buffer)
+            } catch {
+                print("Error writing audio buffer: \\(error)")
+            }
+        }
+        
+        // Start the audio engine
+        try audioEngine.start()
+        
+        print("Audio engine started successfully")
+    }
+    
+    private func cleanup() {
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine = nil
+        audioFile = nil
+        currentRecordingURL = nil
+        
+        print("Cleanup completed")
+    }
+}
+
+// MARK: - Error Types
+
+enum AudioCaptureError: Error {
+    case engineCreationFailed
+    case fileCreationFailed
+    case setupIncomplete
+    
+    var localizedDescription: String {
+        switch self {
+        case .engineCreationFailed:
+            return "Failed to create audio engine"
+        case .fileCreationFailed:
+            return "Failed to create audio file"
+        case .setupIncomplete:
+            return "Audio setup incomplete"
+        }
+    }
+}
