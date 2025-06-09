@@ -6,6 +6,7 @@ import { App } from './components/App';
 import './styles/app.css';
 import './styles/notepad.css';
 import './styles/transcription-panel.css';
+import './styles/homepage.css';
 
 console.log('React renderer starting...');
 

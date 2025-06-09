@@ -314,3 +314,13 @@ The core transcription pipeline is **production-ready**. Steps 8+ focus on enhan
 Complete local processing ensures no data leaves the device, providing enterprise-grade privacy for sensitive audio content while matching commercial transcription quality.
 
 **Current Status: OPERATIONAL** - The application successfully captures system audio, converts formats, transcribes speech using local AI, and displays results in a professional interface. Ready for immediate use and further development!
+
+To-do:
+- Parse the transcribed text for it to look nicer and make it easier to read. Now it is almost impossible to read what has been transcribed.
+- Remove the ugly instruction text at the bottom.
+- We don't need to tool bar at the top of the page with the bold, bullets etc. Remove these. However, I want auto-bullet lists, if the user uses "-" in the text
+- Remove the "Transcriper" title/header at the top. Instead we want to have an editable meeting note title there. Look at the ui_example.png file for inspiration. We also should have date for the note available in the page. 
+- When clicking the record button, we should have two buttons appear right next to each other. First one, dancing bars that indicate the on going recording and the second one on the right, a stop button. Look at buttons.png for inspiration.
+- We need to add a "home page" or landing page for the application. This should have all the previous meeting notes in a compiled view as well as a possibility to create a new note. See homepage.png for insipration.
+- We need to change the colors of the application to way nicer. I would like to change to similar colors as Cursors dark mode. The highligh color could be something like orange. Pick it from a UI color library.
+

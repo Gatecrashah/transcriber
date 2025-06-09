@@ -1,0 +1,139 @@
+import React, { useState, useEffect } from 'react';
+import { Plus, FileText, Calendar, Search } from 'lucide-react';
+
+interface Note {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface HomepageProps {
+  onCreateNote: () => void;
+  onOpenNote: (note: Note) => void;
+}
+
+export const Homepage: React.FC<HomepageProps> = ({ onCreateNote, onOpenNote }) => {
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    // Load notes from localStorage
+    loadNotes();
+  }, []);
+
+  const loadNotes = () => {
+    try {
+      const savedNotes = localStorage.getItem('transcriper-notes');
+      if (savedNotes) {
+        const parsedNotes = JSON.parse(savedNotes).map((note: any) => ({
+          ...note,
+          createdAt: new Date(note.createdAt),
+          updatedAt: new Date(note.updatedAt),
+        }));
+        setNotes(parsedNotes.sort((a: Note, b: Note) => b.updatedAt.getTime() - a.updatedAt.getTime()));
+      }
+    } catch (error) {
+      console.error('Failed to load notes:', error);
+    }
+  };
+
+  const filteredNotes = notes.filter(note =>
+    note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    note.content.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const formatDate = (date: Date) => {
+    const now = new Date();
+    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+    
+    if (diffInHours < 24) {
+      return date.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit' 
+      });
+    } else if (diffInHours < 48) {
+      return 'Yesterday';
+    } else {
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+      });
+    }
+  };
+
+  const getPreviewText = (content: string) => {
+    // Remove HTML tags and get first 100 characters
+    const plainText = content.replace(/<[^>]*>/g, '').trim();
+    return plainText.length > 100 ? plainText.substring(0, 100) + '...' : plainText;
+  };
+
+  return (
+    <div className="homepage">
+      {/* Header */}
+      <header className="homepage-header">
+        <div className="header-content">
+          <h1 className="homepage-title">Transcriper</h1>
+          <button className="new-note-button" onClick={onCreateNote}>
+            <Plus size={16} />
+            New Note
+          </button>
+        </div>
+      </header>
+
+      {/* Search */}
+      <div className="search-container">
+        <div className="search-input-wrapper">
+          <Search size={16} className="search-icon" />
+          <input
+            type="text"
+            placeholder="Search notes..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="search-input"
+          />
+        </div>
+      </div>
+
+      {/* Notes List */}
+      <div className="notes-container">
+        {filteredNotes.length === 0 ? (
+          <div className="empty-state">
+            <FileText size={48} className="empty-icon" />
+            <h3>No notes yet</h3>
+            <p>Create your first meeting note to get started with transcription.</p>
+            <button className="create-first-note-button" onClick={onCreateNote}>
+              <Plus size={16} />
+              Create First Note
+            </button>
+          </div>
+        ) : (
+          <div className="notes-list">
+            {filteredNotes.map((note) => (
+              <div
+                key={note.id}
+                className="note-item"
+                onClick={() => onOpenNote(note)}
+              >
+                <div className="note-content">
+                  <div className="note-header">
+                    <h3 className="note-title">{note.title}</h3>
+                    <span className="note-date">{formatDate(note.updatedAt)}</span>
+                  </div>
+                  {note.content && (
+                    <p className="note-preview">{getPreviewText(note.content)}</p>
+                  )}
+                </div>
+                <div className="note-meta">
+                  <Calendar size={14} />
+                  <span>{note.createdAt.toLocaleDateString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

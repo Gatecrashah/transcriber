@@ -93,3 +93,6 @@ out/
 
 # Claude
 CLAUDE.md
+
+# mockups
+*.png

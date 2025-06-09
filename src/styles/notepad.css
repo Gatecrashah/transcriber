@@ -3,61 +3,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: white;
-}
-
-/* Editor Toolbar */
-.editor-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  border-bottom: 1px solid #e5e5e5;
-  background: #fafafa;
-  flex-wrap: wrap;
-}
-
-.toolbar-group {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 8px;
-  border-right: 1px solid #e5e5e5;
-}
-
-.toolbar-group:last-child {
-  border-right: none;
-}
-
-.toolbar-group button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: #666;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.toolbar-group button:hover {
-  background: #e5e5e5;
-  color: #333;
-}
-
-.toolbar-group button.is-active {
-  background: #007AFF;
-  color: white;
-}
-
-.toolbar-group button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+  background: #29232f;
 }
 
 /* Editor Content */
@@ -69,13 +15,13 @@
 
 .notepad-editor-content {
   max-width: none;
-  padding: 40px 24px 120px; /* Extra bottom padding for floating button */
+  padding: 40px 32px 120px; /* Extra bottom padding for floating button */
   min-height: calc(100% - 40px);
   outline: none;
-  line-height: 1.6;
+  line-height: 1.4;
   font-size: 16px;
-  color: #1a1a1a;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  color: #ebe6ef;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Inter', sans-serif;
 }
 
 /* Placeholder styling */
@@ -94,7 +40,7 @@
   font-weight: 700;
   line-height: 1.2;
   margin: 32px 0 16px;
-  color: #1a1a1a;
+  color: #ebe6ef;
   letter-spacing: -0.025em;
 }
 
@@ -107,7 +53,7 @@
   font-weight: 600;
   line-height: 1.3;
   margin: 24px 0 12px;
-  color: #1a1a1a;
+  color: #ebe6ef;
   letter-spacing: -0.02em;
 }
 
@@ -116,12 +62,13 @@
   font-weight: 600;
   line-height: 1.4;
   margin: 20px 0 8px;
-  color: #1a1a1a;
+  color: #ebe6ef;
 }
 
 .notepad-editor-content p {
-  margin: 12px 0;
-  line-height: 1.7;
+  margin: 8px 0;
+  line-height: 1.4;
+  color: #ebe6ef;
 }
 
 .notepad-editor-content p:first-child {
@@ -141,8 +88,9 @@
 
 .notepad-editor-content ul li,
 .notepad-editor-content ol li {
-  margin: 6px 0;
-  line-height: 1.6;
+  margin: 3px 0;
+  line-height: 1.4;
+  color: #ebe6ef;
 }
 
 .notepad-editor-content ul li {
@@ -153,25 +101,34 @@
   list-style-type: decimal;
 }
 
+.notepad-editor-content ul li::marker {
+  color: #ff8c42;
+}
+
+.notepad-editor-content ol li::marker {
+  color: #ff8c42;
+}
+
 /* Text Formatting */
 .notepad-editor-content strong {
   font-weight: 600;
-  color: #1a1a1a;
+  color: #ebe6ef;
 }
 
 .notepad-editor-content em {
   font-style: italic;
+  color: #ebe6ef;
 }
 
 .notepad-editor-content s {
   text-decoration: line-through;
-  color: #666;
+  color: #9ca3af;
 }
 
 /* Code (if using code extension later) */
 .notepad-editor-content code {
-  background: #f5f5f5;
-  color: #e74c3c;
+  background: #3a3443;
+  color: #ff8c42;
   padding: 2px 6px;
   border-radius: 4px;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
@@ -179,7 +136,8 @@
 }
 
 .notepad-editor-content pre {
-  background: #f8f9fa;
+  background: #2a1f30;
+  border: 1px solid #3a3443;
   border-radius: 8px;
   padding: 16px;
   margin: 16px 0;
@@ -187,16 +145,16 @@
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
   font-size: 14px;
   line-height: 1.5;
-  color: #333;
+  color: #ebe6ef;
 }
 
 /* Selection */
 .notepad-editor-content ::selection {
-  background: rgba(0, 122, 255, 0.2);
+  background: rgba(255, 140, 66, 0.3);
 }
 
 .notepad-editor-content::-moz-selection {
-  background: rgba(0, 122, 255, 0.2);
+  background: rgba(255, 140, 66, 0.3);
 }
 
 /* Focus state */
@@ -214,33 +172,18 @@
 }
 
 .editor-content-wrapper::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: #3a3443;
   border-radius: 4px;
 }
 
 .editor-content-wrapper::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: #6b7280;
 }
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .notepad-editor-content {
-    padding: 24px 16px 100px;
+    padding: 24px 20px 100px;
     font-size: 16px;
-  }
-  
-  .editor-toolbar {
-    padding: 8px 16px;
-    gap: 4px;
-  }
-  
-  .toolbar-group {
-    padding: 0 4px;
-  }
-  
-  .toolbar-group button {
-    width: 28px;
-    height: 28px;
-    font-size: 12px;
   }
 }

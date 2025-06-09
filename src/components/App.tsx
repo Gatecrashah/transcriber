@@ -1,15 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Mic, MicOff, PanelRightOpen, PanelRightClose } from 'lucide-react';
+import { Mic, Square, PanelRightOpen, PanelRightClose, ArrowLeft } from 'lucide-react';
 import { NotepadEditor } from './NotepadEditor';
 import { TranscriptionPanel } from './TranscriptionPanel';
+import { Homepage } from './Homepage';
 import { useAudioRecording } from '../hooks/useAudioRecording';
 import { useTranscription } from '../hooks/useTranscription';
+import { useNoteManagement } from '../hooks/useNoteManagement';
 
 export const App: React.FC = () => {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [transcriptionText, setTranscriptionText] = useState('');
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+
+  // Note management
+  const {
+    currentNote,
+    isOnHomepage,
+    createNewNote,
+    openNote,
+    goToHomepage,
+    updateCurrentNote,
+  } = useNoteManagement();
   
   const {
     isRecording,
@@ -86,6 +99,33 @@ export const App: React.FC = () => {
     setIsPanelOpen(!isPanelOpen);
   };
 
+  const handleTitleEdit = () => {
+    setIsEditingTitle(true);
+  };
+
+  const handleTitleSave = (newTitle: string) => {
+    const title = newTitle || 'Meeting Notes';
+    updateCurrentNote({ title });
+    setIsEditingTitle(false);
+  };
+
+  const formatDate = () => {
+    const now = new Date();
+    return now.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  };
+
+  // Show homepage if on homepage, otherwise show note editor
+  if (isOnHomepage) {
+    return (
+      <div className="app">
+        <Homepage onCreateNote={createNewNote} onOpenNote={openNote} />
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       {/* Main Content Area */}
@@ -93,7 +133,32 @@ export const App: React.FC = () => {
         {/* Header */}
         <header className="app-header">
           <div className="header-left">
-            <h1 className="app-title">Transcriper</h1>
+            <div className="note-meta">
+              <button className="back-button" onClick={goToHomepage} title="Back to homepage">
+                <ArrowLeft size={20} />
+              </button>
+              {isEditingTitle ? (
+                <input
+                  type="text"
+                  className="note-title-input"
+                  value={currentNote?.title || ''}
+                  onChange={(e) => updateCurrentNote({ title: e.target.value })}
+                  onBlur={() => handleTitleSave(currentNote?.title || '')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleTitleSave(currentNote?.title || '');
+                    } else if (e.key === 'Escape') {
+                      setIsEditingTitle(false);
+                    }
+                  }}
+                  autoFocus
+                />
+              ) : (
+                <h1 className="note-title" onClick={handleTitleEdit}>
+                  {currentNote?.title || 'Meeting Notes'}
+                </h1>
+              )}
+            </div>
           </div>
           <div className="header-right">
             <button 
@@ -106,41 +171,59 @@ export const App: React.FC = () => {
           </div>
         </header>
 
+        {/* Date Badge */}
+        <div className="note-date-container">
+          <div className="note-date">{formatDate()}</div>
+        </div>
+
         {/* Notepad Editor */}
         <div className="editor-container">
-          <NotepadEditor />
+          <NotepadEditor 
+            initialContent={currentNote?.content || ''}
+            onContentChange={(content) => updateCurrentNote({ content })}
+          />
         </div>
 
         {/* Floating Record Button */}
         <div className="floating-controls">
-          <button
-            className={`record-button ${isRecording ? 'recording' : ''} ${!isInitialized ? 'initializing' : ''}`}
-            onClick={handleToggleRecording}
-            disabled={!isInitialized || isTranscribing}
-            title={
-              !isInitialized 
-                ? 'Initializing...' 
-                : isRecording 
-                  ? 'Stop recording' 
-                  : 'Start recording'
-            }
-          >
-            {!isInitialized ? (
-              <div className="spinner" />
-            ) : isRecording ? (
-              <MicOff size={24} />
-            ) : (
-              <Mic size={24} />
-            )}
-            {isRecording && isInitialized && (
-              <div className="audio-level-indicator">
-                <div 
-                  className="audio-level-bar" 
-                  style={{ height: `${audioLevel}%` }}
-                />
+          {!isRecording ? (
+            <button
+              className={`record-button ${!isInitialized ? 'initializing' : ''}`}
+              onClick={handleToggleRecording}
+              disabled={!isInitialized || isTranscribing}
+              title={!isInitialized ? 'Initializing...' : 'Start recording'}
+            >
+              {!isInitialized ? (
+                <div className="spinner" />
+              ) : (
+                <Mic size={20} />
+              )}
+            </button>
+          ) : (
+            <div className="recording-controls">
+              <div className="audio-visualizer">
+                <div className="audio-bars">
+                  {[...Array(3)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="audio-bar"
+                      style={{
+                        animationDelay: `${i * 0.1}s`,
+                        height: `${Math.min(100, 20 + audioLevel * 0.8)}%`,
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
-            )}
-          </button>
+              <button
+                className="stop-button"
+                onClick={handleToggleRecording}
+                title="Stop recording"
+              >
+                <Square size={14} />
+              </button>
+            </div>
+          )}
           
           {!isInitialized && !initError && (
             <div className="initializing-indicator">
@@ -163,12 +246,6 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* Success/Info Messages */}
-        {isInitialized && !isPanelOpen && !isRecording && !isTranscribing && (
-          <div className="info-toast">
-            💡 Ready to record! Click the microphone button to start capturing system audio
-          </div>
-        )}
       </div>
 
       {/* Transcription Side Panel */}
