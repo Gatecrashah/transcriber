@@ -2,39 +2,37 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <title>Transcriper - PoC</title>
+    <title>Transcriper</title>
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval';" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <style>
+      /* Prevent flash of unstyled content */
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+        background: #fafafa;
+        overflow: hidden;
+      }
+      
+      #root {
+        height: 100vh;
+        width: 100vw;
+      }
+      
+      /* Loading state */
+      .loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        color: #666;
+      }
+    </style>
   </head>
   <body>
-    <div class="app">
-      <header class="header">
-        <h1>Transcriper - Proof of Concept</h1>
-        <div class="status" id="status">Ready</div>
-      </header>
-      
-      <main class="main">
-        <section class="controls">
-          <button id="recordBtn" class="btn btn-record">Start Recording</button>
-          <button id="stopBtn" class="btn btn-stop" disabled>Stop Recording</button>
-          <div class="audio-level">
-            <label>Audio Level:</label>
-            <div class="level-meter">
-              <div id="levelBar" class="level-bar"></div>
-            </div>
-          </div>
-        </section>
-        
-        <section class="transcription">
-          <h2>Transcription Results</h2>
-          <div id="transcriptionOutput" class="transcription-output">
-            <p class="placeholder">Start recording to see transcription results...</p>
-          </div>
-        </section>
-        
-        <section class="debug">
-          <h3>Debug Info</h3>
-          <div id="debugOutput" class="debug-output"></div>
-        </section>
-      </main>
+    <div id="root">
+      <div class="loading">Loading Transcriper...</div>
     </div>
   </body>
 </html>

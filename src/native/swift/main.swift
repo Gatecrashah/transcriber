@@ -42,10 +42,22 @@ class AudioCaptureApp {
             
             // Keep the process alive while recording
             isRunning = true
-            let runLoop = RunLoop.current
             
-            while isRunning && runLoop.run(mode: .default, before: Date(timeIntervalSinceNow: 0.1)) {
-                // Keep running
+            // Setup signal handlers to stop recording gracefully
+            signal(SIGINT) { _ in
+                if let app = AudioCaptureApp.shared {
+                    app.handleTermination()
+                }
+            }
+            signal(SIGTERM) { _ in
+                if let app = AudioCaptureApp.shared {
+                    app.handleTermination()
+                }
+            }
+            
+            // Run the main loop to keep process alive
+            while isRunning {
+                RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
             }
             
         } else {
@@ -53,6 +65,16 @@ class AudioCaptureApp {
             exit(1)
         }
     }
+    
+    func handleTermination() {
+        if let filePath = audioCapture.stopRecording() {
+            print("Recording stopped. File saved to: \(filePath)")
+        }
+        isRunning = false
+        exit(0)
+    }
+    
+    static var shared: AudioCaptureApp?
     
     private func stopRecording() {
         if let filePath = audioCapture.stopRecording() {
@@ -88,4 +110,5 @@ class AudioCaptureApp {
 
 // Entry point
 let app = AudioCaptureApp()
+AudioCaptureApp.shared = app
 app.run()

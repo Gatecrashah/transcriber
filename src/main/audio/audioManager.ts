@@ -133,46 +133,109 @@ export class AudioManager {
     }
 
     try {
-      // Use the stop command to gracefully stop recording
-      const stopProcess = spawn(this.audioCaptureUtility, ['stop'], {
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-
       let outputPath: string | null = null;
-
-      stopProcess.stdout?.on('data', (data) => {
+      
+      // Set up listeners to capture the file path from the main process
+      const outputHandler = (data: Buffer) => {
         const output = data.toString();
         console.log('Stop output:', output);
         
         // Extract file path from output
         const match = output.match(/File saved to: (.+)/);
         if (match) {
-          outputPath = match[1];
+          outputPath = match[1].trim();
+          console.log('Captured audio file path:', outputPath);
         }
-      });
+      };
 
-      stopProcess.on('close', (code) => {
-        console.log(`Stop process exited with code ${code}`);
-        
-        // Process the recorded file if we got a path
-        if (outputPath && fs.existsSync(outputPath)) {
-          this.outputPath = outputPath;
-          const audioData = fs.readFileSync(outputPath);
-          this.audioCallback?.(audioData);
-        }
-      });
+      // Add listener for stdout to capture file path
+      this.audioProcess.stdout?.on('data', outputHandler);
 
-      // Also signal the recording process to stop
+      // Signal the recording process to stop gracefully
+      console.log('Sending SIGTERM to audio process...');
       this.audioProcess.kill('SIGTERM');
+      
+      // Wait for the process to finish and capture output
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          console.log('Timeout waiting for audio process to stop');
+          resolve();
+        }, 5000);
+
+        this.audioProcess?.on('close', (code) => {
+          clearTimeout(timeout);
+          console.log(`Audio recording process exited with code ${code}`);
+          resolve();
+        });
+      });
+
       this.isRecording = false;
       this.audioLevel = 0;
+      this.audioProcess = null;
       
-      // Wait for processes to finish
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // If we captured the file path, use it; otherwise fall back to default
+      if (outputPath && fs.existsSync(outputPath)) {
+        this.outputPath = outputPath;
+        console.log('Using captured audio file:', this.outputPath);
+      } else {
+        console.log('No output path captured, checking default locations');
+        // Look for the most recent recording file in the TranscriperAudio temp directory
+        try {
+          // Check macOS temporary directory structure
+          const baseTempDirs = [
+            '/tmp/TranscriperAudio',
+            '/var/folders',
+            process.env.TMPDIR ? path.join(process.env.TMPDIR, 'TranscriperAudio') : null
+          ].filter(Boolean);
+
+          let foundFile = false;
+
+          for (const baseDir of baseTempDirs as string[]) {
+            if (fs.existsSync(baseDir)) {
+              console.log('Checking directory:', baseDir);
+              try {
+                const files = fs.readdirSync(baseDir).filter(f => f.startsWith('recording_') && f.endsWith('.wav'));
+                if (files.length > 0) {
+                  const latestFile = files.sort().pop();
+                  if (latestFile) {
+                    this.outputPath = path.join(baseDir, latestFile);
+                    console.log('Found latest recording file:', this.outputPath);
+                    foundFile = true;
+                    break;
+                  }
+                }
+              } catch (dirError) {
+                console.log('Error reading directory:', baseDir, dirError);
+                continue;
+              }
+            }
+          }
+
+          // If still not found, check if TMPDIR has TranscriperAudio subdirectory
+          if (!foundFile && process.env.TMPDIR) {
+            const tmpDirPath = path.join(process.env.TMPDIR, 'TranscriperAudio');
+            if (fs.existsSync(tmpDirPath)) {
+              const files = fs.readdirSync(tmpDirPath).filter(f => f.startsWith('recording_') && f.endsWith('.wav'));
+              if (files.length > 0) {
+                const latestFile = files.sort().pop();
+                if (latestFile) {
+                  this.outputPath = path.join(tmpDirPath, latestFile);
+                  console.log('Found recording in TMPDIR/TranscriperAudio:', this.outputPath);
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.log('Error finding recording files:', error);
+        }
+      }
       
       return true;
     } catch (error) {
       console.error('Error stopping recording:', error);
+      this.isRecording = false;
+      this.audioLevel = 0;
+      this.audioProcess = null;
       return false;
     }
   }

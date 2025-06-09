@@ -126,14 +126,26 @@ import AVFoundation
             throw AudioCaptureError.setupIncomplete
         }
         
-        // Get the input node's format to ensure compatibility
+        // Get the input node's format
         let inputFormat = audioEngine.inputNode.outputFormat(forBus: 0)
         
-        // Create audio file with the same format as input
-        audioFile = try AVAudioFile(forWriting: url, settings: inputFormat.settings)
+        // Create format settings for 16 kHz mono WAV file (required by whisper.cpp)
+        let outputSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 16000.0,  // 16 kHz required by whisper.cpp
+            AVNumberOfChannelsKey: 1,  // Mono
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsNonInterleaved: false
+        ]
+        
+        // Create audio file with whisper.cpp compatible format
+        audioFile = try AVAudioFile(forWriting: url, settings: outputSettings)
         
         print("Audio file setup complete: \(fileName)")
         print("Input format: \(inputFormat)")
+        print("Output format: 16 kHz, 16-bit PCM, Mono (whisper.cpp compatible)")
     }
     
     private func startRecording() throws {
@@ -144,11 +156,39 @@ import AVFoundation
         
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
+        let outputFormat = audioFile.processingFormat
+        
+        // Create audio converter for format conversion if needed
+        let converter = AVAudioConverter(from: inputFormat, to: outputFormat)
+        guard let audioConverter = converter else {
+            throw AudioCaptureError.setupIncomplete
+        }
         
         // Install tap on input node with the input format
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { (buffer, time) in
+            // Convert the buffer to the output format
+            let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: AVAudioFrameCount(Double(buffer.frameLength) * outputFormat.sampleRate / inputFormat.sampleRate))
+            
+            guard let convertedBuffer = outputBuffer else {
+                print("Error creating output buffer")
+                return
+            }
+            
+            var error: NSError?
+            let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
+                outStatus.pointee = .haveData
+                return buffer
+            }
+            
+            audioConverter.convert(to: convertedBuffer, error: &error, withInputFrom: inputBlock)
+            
+            if let conversionError = error {
+                print("Error converting audio: \(conversionError.localizedDescription)")
+                return
+            }
+            
             do {
-                try audioFile.write(from: buffer)
+                try audioFile.write(from: convertedBuffer)
             } catch {
                 print("Error writing audio buffer: \(error.localizedDescription)")
             }
@@ -158,6 +198,7 @@ import AVFoundation
         try audioEngine.start()
         
         print("Audio engine started successfully")
+        print("Recording with format conversion: \(inputFormat.sampleRate) Hz -> \(outputFormat.sampleRate) Hz")
     }
     
     private func cleanup() {
