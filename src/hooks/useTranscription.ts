@@ -15,6 +15,9 @@ interface TranscriptionResult {
 interface TranscriptionOptions {
   language?: string;
   threads?: number;
+  model?: string;
+  temperature?: number;
+  beam_size?: number;
 }
 
 export const useTranscription = () => {
@@ -47,6 +50,9 @@ export const useTranscription = () => {
       const result = await window.electronAPI.transcription.transcribeFile(audioPath, {
         language: options.language || 'auto',
         threads: options.threads || 4,
+        model: options.model || 'base',
+        temperature: options.temperature || 0,
+        beam_size: options.beam_size || 5,
       });
 
       // Clean up progress listener

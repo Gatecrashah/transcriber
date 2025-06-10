@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, FileText, Calendar, Search } from 'lucide-react';
+import { Plus, FileText, Calendar, Search, Trash2 } from 'lucide-react';
 
 interface Note {
   id: string;
@@ -12,9 +12,10 @@ interface Note {
 interface HomepageProps {
   onCreateNote: () => void;
   onOpenNote: (note: Note) => void;
+  onDeleteNote?: (noteId: string) => void;
 }
 
-export const Homepage: React.FC<HomepageProps> = ({ onCreateNote, onOpenNote }) => {
+export const Homepage: React.FC<HomepageProps> = ({ onCreateNote, onOpenNote, onDeleteNote }) => {
   const [notes, setNotes] = useState<Note[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -69,6 +70,17 @@ export const Homepage: React.FC<HomepageProps> = ({ onCreateNote, onOpenNote }) 
     return plainText.length > 100 ? plainText.substring(0, 100) + '...' : plainText;
   };
 
+  const handleDeleteNote = (noteId: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent opening the note when clicking delete
+    if (window.confirm('Are you sure you want to delete this note?')) {
+      if (onDeleteNote) {
+        onDeleteNote(noteId);
+      }
+      // Remove from local state immediately
+      setNotes(prev => prev.filter(note => note.id !== noteId));
+    }
+  };
+
   return (
     <div className="homepage">
       {/* Header */}
@@ -118,8 +130,19 @@ export const Homepage: React.FC<HomepageProps> = ({ onCreateNote, onOpenNote }) 
               >
                 <div className="note-content">
                   <div className="note-header">
-                    <h3 className="note-title">{note.title}</h3>
-                    <span className="note-date">{formatDate(note.updatedAt)}</span>
+                    <div className="note-header-left">
+                      <h3 className="note-title">{note.title}</h3>
+                    </div>
+                    <div className="note-header-right">
+                      <span className="note-date">{formatDate(note.updatedAt)}</span>
+                      <button
+                        className="delete-button"
+                        onClick={(e) => handleDeleteNote(note.id, e)}
+                        title="Delete note"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                   {note.content && (
                     <p className="note-preview">{getPreviewText(note.content)}</p>

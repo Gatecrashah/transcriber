@@ -3,6 +3,7 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
+  width: 100%;
   background: #29232f;
   color: #ebe6ef;
 }
@@ -21,6 +22,7 @@
   align-items: center;
   padding: 20px 32px;
   width: 100%;
+  max-width: none;
 }
 
 .homepage-title {
@@ -54,12 +56,12 @@
 .search-container {
   padding: 24px 32px;
   width: 100%;
+  max-width: none;
 }
 
 .search-input-wrapper {
   position: relative;
   width: 100%;
-  max-width: 600px;
 }
 
 .search-icon {
@@ -98,6 +100,7 @@
   overflow-y: auto;
   padding: 0 32px 32px;
   width: 100%;
+  max-width: 100%;
 }
 
 /* Empty State */
@@ -152,11 +155,14 @@
 
 /* Notes List */
 .notes-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 16px;
   margin-top: 8px;
+  width: 100%;
+  max-width: 100%;
 }
+
 
 .note-item {
   background: #3a3443;
@@ -166,6 +172,9 @@
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
+  min-height: 100px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .note-item:hover {
@@ -186,13 +195,22 @@
   margin-bottom: 8px;
 }
 
+.note-header-left {
+  flex: 1;
+  margin-right: 16px;
+}
+
+.note-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .note-title {
   font-size: 16px;
   font-weight: 600;
   color: #ebe6ef;
   margin: 0;
-  flex: 1;
-  margin-right: 16px;
 }
 
 .note-date {
@@ -200,6 +218,30 @@
   color: #ff8c42;
   font-weight: 500;
   white-space: nowrap;
+}
+
+.delete-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #7d8590;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0;
+}
+
+.note-item:hover .delete-button {
+  opacity: 1;
+}
+
+.delete-button:hover {
+  background: rgba(218, 54, 51, 0.1);
+  color: #da3633;
 }
 
 .note-preview {
@@ -256,12 +298,12 @@
   }
 
   .notes-list {
-    grid-template-columns: 1fr;
     gap: 12px;
   }
 
   .note-item {
     padding: 16px;
+    max-width: 100%;
   }
 
   .note-header {
@@ -275,18 +317,7 @@
   }
 
   .search-input-wrapper {
-    max-width: 100%;
+    width: 100%;
   }
 }
 
-@media (min-width: 769px) and (max-width: 1024px) {
-  .notes-list {
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  }
-}
-
-@media (min-width: 1025px) {
-  .notes-list {
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  }
-}

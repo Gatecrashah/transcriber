@@ -76,16 +76,13 @@ export const NotepadEditor: React.FC<NotepadEditorProps> = ({
       if (editor && event.detail) {
         const transcribedText = event.detail;
         
-        // Parse and format transcribed text for better readability
-        const formattedText = formatTranscribedText(transcribedText);
-        
-        // Insert at cursor position or at the end
+        // Insert at cursor position or at the end (text is already formatted)
         if (editor.isFocused) {
-          editor.commands.insertContent(formattedText);
+          editor.commands.insertContent(transcribedText);
         } else {
           // If editor is not focused, append to the end
           editor.commands.focus('end');
-          editor.commands.insertContent('\n\n' + formattedText);
+          editor.commands.insertContent('\n\n' + transcribedText);
         }
       }
     };
@@ -96,54 +93,6 @@ export const NotepadEditor: React.FC<NotepadEditorProps> = ({
     };
   }, [editor]);
 
-  // Format transcribed text for better readability
-  const formatTranscribedText = (text: string): string => {
-    if (!text) return '';
-    
-    // Remove timestamps and clean up the text
-    let formatted = text
-      // Remove timestamp patterns like [00:00:00] or (00:00:00) or 00:00:00
-      .replace(/\[[0-9]+:[0-9]+:[0-9]+\]/g, '')
-      .replace(/\([0-9]+:[0-9]+:[0-9]+\)/g, '')
-      .replace(/^[0-9]+:[0-9]+:[0-9]+/g, '')
-      .replace(/\s+[0-9]+:[0-9]+:[0-9]+\s+/g, ' ')
-      // Remove other timestamp formats like 0:00.0
-      .replace(/[0-9]+:[0-9]+\.[0-9]+/g, '')
-      // Remove speaker labels like "Speaker 1:" or "SPEAKER_01:"
-      .replace(/SPEAKER_[0-9]+:\s*/gi, '')
-      .replace(/Speaker\s+[0-9]+:\s*/gi, '')
-      // Remove multiple dashes and clean separators
-      .replace(/[-–—]+/g, '')
-      // Clean up multiple spaces and newlines
-      .replace(/\s+/g, ' ')
-      .replace(/\n+/g, ' ')
-      // Trim whitespace
-      .trim();
-    
-    // Split into sentences and add proper formatting
-    formatted = formatted
-      // Add periods if missing at end of sentences before capital letters
-      .replace(/([a-z])\s+([A-Z])/g, '$1. $2')
-      // Ensure proper capitalization after periods
-      .replace(/\.\s+([a-z])/g, (match, letter) => '. ' + letter.toUpperCase())
-      // Clean up multiple periods
-      .replace(/\.+/g, '.')
-      // Remove leading/trailing punctuation artifacts
-      .replace(/^[^\w]+/, '')
-      .replace(/[^\w.!?]+$/, '');
-    
-    // Ensure first letter is capitalized
-    if (formatted.length > 0) {
-      formatted = formatted.charAt(0).toUpperCase() + formatted.slice(1);
-    }
-    
-    // Add period at end if missing and text doesn't end with punctuation
-    if (formatted && !formatted.match(/[.!?]$/)) {
-      formatted += '.';
-    }
-    
-    return formatted;
-  };
 
   if (!editor) {
     return null;
