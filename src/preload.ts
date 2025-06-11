@@ -6,9 +6,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     initialize: () => ipcRenderer.invoke('audio:initialize'),
     getDevices: () => ipcRenderer.invoke('audio:getDevices'),
     startRecording: () => ipcRenderer.invoke('audio:startRecording'),
+    startSystemCapture: () => ipcRenderer.invoke('audio:startSystemCapture'),
     stopRecording: () => ipcRenderer.invoke('audio:stopRecording'),
     getLevel: () => ipcRenderer.invoke('audio:getLevel'),
     isRecording: () => ipcRenderer.invoke('audio:isRecording'),
+    saveAudioFile: (audioData: ArrayBuffer) => ipcRenderer.invoke('audio:saveAudioFile', audioData),
+    getDesktopSources: () => ipcRenderer.invoke('audio:getDesktopSources'),
   },
   transcription: {
     checkInstallation: () => ipcRenderer.invoke('transcription:check-installation'),
@@ -31,9 +34,12 @@ declare global {
         initialize: () => Promise<{ success: boolean; error?: string }>;
         getDevices: () => Promise<{ success: boolean; devices?: any[]; error?: string }>;
         startRecording: () => Promise<{ success: boolean; error?: string }>;
+        startSystemCapture: () => Promise<{ success: boolean; error?: string }>;
         stopRecording: () => Promise<{ success: boolean; audioPath?: string; error?: string }>;
         getLevel: () => Promise<{ success: boolean; level?: number; error?: string }>;
         isRecording: () => Promise<{ success: boolean; isRecording?: boolean; error?: string }>;
+        saveAudioFile: (audioData: ArrayBuffer) => Promise<{ success: boolean; audioPath?: string; error?: string }>;
+        getDesktopSources: () => Promise<{ success: boolean; sources?: Array<{id: string; name: string}>; error?: string }>;
       };
       transcription: {
         checkInstallation: () => Promise<{ installed: boolean; error?: string }>;

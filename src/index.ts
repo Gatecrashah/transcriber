@@ -20,8 +20,37 @@ const createWindow = (): void => {
     width: 800,
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
+      nodeIntegration: false,
+      contextIsolation: true,
+      allowRunningInsecureContent: false,
+      experimentalFeatures: true,
+      enableBlinkFeatures: 'WebCodecs'
     },
   });
+
+  // Handle permission requests
+  mainWindow.webContents.session.setPermissionRequestHandler((_, permission, callback) => {
+    console.log('Permission requested:', permission);
+    if (permission === 'media' || permission === 'display-capture') {
+      callback(true);
+    } else {
+      callback(false);
+    }
+  });
+
+  // Enable getDisplayMedia support (required for Electron)
+  try {
+    mainWindow.webContents.session.setDisplayMediaRequestHandler((request, callback) => {
+      console.log('Display media request:', request);
+      // Grant access to screen capture for getDisplayMedia()
+      callback({ 
+        video: mainWindow.webContents.mainFrame, 
+        audio: 'loopback' 
+      } as any);
+    });
+  } catch (error) {
+    console.log('setDisplayMediaRequestHandler not available:', error);
+  }
 
   // and load the index.html of the app.
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);

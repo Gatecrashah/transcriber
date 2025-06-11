@@ -47,9 +47,9 @@ export const App: React.FC = () => {
       
       // Clean up isolated dashes and punctuation artifacts
       .replace(/\s*-\.\s*/g, ' ')                          // "- ." patterns
-      .replace(/^\s*[\.\-\[\]]+\s*/g, '')                  // Leading punctuation
-      .replace(/\s*[\.\-\[\]]+\s*$/g, '')                  // Trailing punctuation  
-      .replace(/\s*[\.\-]+\s+/g, ' ')                      // Isolated dots and dashes
+      .replace(/^\s*[.\-[\]]+\s*/g, '')                  // Leading punctuation
+      .replace(/\s*[.\-[\]]+\s*$/g, '')                  // Trailing punctuation  
+      .replace(/\s*[.\-]+\s+/g, ' ')                      // Isolated dots and dashes
       .replace(/\[\s*\]/g, '')                             // Empty brackets
       
       // Aggressive whitespace cleanup
@@ -134,6 +134,7 @@ export const App: React.FC = () => {
     isRecording,
     audioLevel,
     startRecording,
+    startSystemAudioCapture,
     stopRecording,
     error: audioError
   } = useAudioRecording();
@@ -187,24 +188,40 @@ export const App: React.FC = () => {
   const handleToggleRecording = async () => {
     if (isRecording) {
       const result = await stopRecording();
+      console.log('🎤 Stop recording result:', result);
+      
       if (result.success && result.audioPath) {
-        // Start transcription with specific language and model settings
-        const transcriptionResult = await transcribe(result.audioPath, {
-          language: 'en',    // Set to 'en' for English, 'auto' for auto-detect, or specific language codes
-          threads: 4,        // Number of CPU threads to use
-          model: 'large',   // Whisper model: tiny, base, small, medium, large (if supported)
-        });
-        if (transcriptionResult.success && transcriptionResult.text.trim()) {
-          console.log('RAW TRANSCRIPTION:', transcriptionResult.text);
-          const formattedText = formatTranscribedText(transcriptionResult.text.trim());
-          console.log('FORMATTED TRANSCRIPTION:', formattedText);
-          setTranscriptionText(formattedText);
-          // Open panel to show transcription
-          setIsPanelOpen(true);
+        console.log('🔄 Starting transcription for:', result.audioPath);
+        
+        // Start transcription with optimized settings for speech detection
+        try {
+          const transcriptionResult = await transcribe(result.audioPath, {
+            language: 'en',     // Force English for better results with speech
+            threads: 8,        // Use more CPU threads for better processing
+            model: 'base',      // Use base model (most reliable for general speech)
+          });
+          
+          console.log('🗣️ Transcription result:', transcriptionResult);
+          
+          if (transcriptionResult.success && transcriptionResult.text.trim()) {
+            console.log('RAW TRANSCRIPTION:', transcriptionResult.text);
+            const formattedText = formatTranscribedText(transcriptionResult.text.trim());
+            console.log('FORMATTED TRANSCRIPTION:', formattedText);
+            setTranscriptionText(formattedText);
+            // Open panel to show transcription
+            setIsPanelOpen(true);
+          } else {
+            console.error('❌ Transcription failed or returned empty text:', transcriptionResult);
+          }
+        } catch (error) {
+          console.error('❌ Transcription error:', error);
         }
+      } else {
+        console.error('❌ Recording failed or no audio path:', result);
       }
     } else {
-      await startRecording();
+      // Use system audio capture for computer audio (not microphone)
+      await startSystemAudioCapture();
     }
   };
 

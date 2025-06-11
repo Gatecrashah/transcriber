@@ -64,8 +64,8 @@ export class AudioManager {
       
       // Parse macOS audio device data
       if (data.SPAudioDataType) {
-        data.SPAudioDataType.forEach((device: any) => {
-          if (device._name) {
+        data.SPAudioDataType.forEach((device: Record<string, unknown>) => {
+          if (device._name && typeof device._name === 'string') {
             devices.push({
               id: device._name,
               name: device._name,
@@ -82,16 +82,17 @@ export class AudioManager {
     }
   }
 
-  async startRecording(): Promise<boolean> {
+  async startRecording(useSystemAudio = false): Promise<boolean> {
     if (this.isRecording) {
       return false;
     }
 
     try {
-      console.log('Starting audio recording with Swift utility...');
+      const command = useSystemAudio ? 'start-system' : 'start';
+      console.log(`Starting audio recording with Swift utility using command: ${command}`);
       
       // Start the Swift audio capture utility
-      this.audioProcess = spawn(this.audioCaptureUtility, ['start'], {
+      this.audioProcess = spawn(this.audioCaptureUtility, [command], {
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
@@ -125,6 +126,11 @@ export class AudioManager {
       console.error('Error starting recording:', error);
       return false;
     }
+  }
+
+  async startSystemAudioCapture(): Promise<boolean> {
+    console.log('Starting system audio capture using macOS 14.4+ APIs...');
+    return this.startRecording(true);
   }
 
   async stopRecording(): Promise<boolean> {
@@ -259,6 +265,34 @@ export class AudioManager {
 
   getOutputPath(): string {
     return this.outputPath;
+  }
+
+  async saveAudioFile(fileName: string, audioBuffer: Buffer): Promise<{ success: boolean; filePath?: string; error?: string }> {
+    try {
+      // Create temporary directory if it doesn't exist
+      const tempDir = process.env.TMPDIR ? path.join(process.env.TMPDIR, 'TranscriperAudio') : '/tmp/TranscriperAudio';
+      
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      
+      // Create full file path
+      const filePath = path.join(tempDir, fileName);
+      
+      // Write the audio buffer to file
+      await fs.promises.writeFile(filePath, audioBuffer);
+      
+      console.log('✅ Audio file saved:', filePath);
+      console.log('   Size:', audioBuffer.length, 'bytes');
+      
+      return { success: true, filePath };
+    } catch (error) {
+      console.error('❌ Error saving audio file:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
   }
 
   cleanup(): void {
