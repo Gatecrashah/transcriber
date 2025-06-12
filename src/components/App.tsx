@@ -14,6 +14,46 @@ export const App: React.FC = () => {
   const [initError, setInitError] = useState<string | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
 
+  // Format speaker-identified transcribed text while preserving speaker labels
+  const formatSpeakerTranscribedText = (text: string): string => {
+    if (!text) return '';
+    
+    console.log('Formatting speaker transcription:', text);
+    
+    // Split by speaker sections (marked with **Speaker Name:**)
+    const sections = text.split(/(\*\*[^*]+:\*\*)/);
+    
+    let formattedText = '';
+    
+    for (let i = 0; i < sections.length; i++) {
+      const section = sections[i];
+      
+      // Check if this is a speaker label
+      if (section.match(/^\*\*[^*]+:\*\*$/)) {
+        if (formattedText) formattedText += '\n\n';
+        formattedText += section + '\n';
+      } else if (section.trim()) {
+        // This is content for the current speaker - clean it up
+        const cleanedContent = section
+          // Remove timestamp patterns
+          .replace(/\[[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s*-->\s*[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\]/g, '')
+          // Remove BLANK_AUDIO markers
+          .replace(/\[BLANK_AUDIO\]/gi, '')
+          // Remove [inaudible] markers  
+          .replace(/\[inaudible\]/gi, '')
+          // Remove excessive whitespace
+          .replace(/\s+/g, ' ')
+          .trim();
+          
+        if (cleanedContent) {
+          formattedText += cleanedContent + '\n';
+        }
+      }
+    }
+    
+    return formattedText.trim();
+  };
+
   // Format transcribed text for better readability
   const formatTranscribedText = (text: string): string => {
     if (!text) return '';
@@ -144,6 +184,7 @@ export const App: React.FC = () => {
 
   const {
     transcribe,
+    transcribeDualStreams,
     isTranscribing,
     error: transcriptionError,
     checkInstallation
@@ -193,34 +234,66 @@ export const App: React.FC = () => {
       const result = await stopRecording();
       console.log('🎤 Stop recording result:', result);
       
-      if (result.success && result.audioPath) {
-        console.log('🔄 Starting transcription for:', result.audioPath);
+      if (result.success) {
+        console.log('🔄 Starting transcription for dual streams');
         
-        // Start transcription with optimized settings for speech detection
-        try {
-          const transcriptionResult = await transcribe(result.audioPath, {
-            language: 'en',     // Force English for better results with speech
-            threads: 8,        // Use more CPU threads for better processing
-            model: 'base',      // Use base model (most reliable for general speech)
-          });
+        // Check if we have dual-stream recording results
+        if (result.systemAudioPath || result.microphoneAudioPath) {
+          console.log('🎙️ Using dual-stream transcription with speaker diarization');
           
-          console.log('🗣️ Transcription result:', transcriptionResult);
-          
-          if (transcriptionResult.success && transcriptionResult.text.trim()) {
-            console.log('RAW TRANSCRIPTION:', transcriptionResult.text);
-            const formattedText = formatTranscribedText(transcriptionResult.text.trim());
-            console.log('FORMATTED TRANSCRIPTION:', formattedText);
-            setTranscriptionText(formattedText);
-            // Open panel to show transcription
-            setIsPanelOpen(true);
-          } else {
-            console.error('❌ Transcription failed or returned empty text:', transcriptionResult);
+          try {
+            const transcriptionResult = await transcribeDualStreams(
+              result.systemAudioPath,
+              result.microphoneAudioPath,
+              {
+                language: 'en',
+                threads: 8,
+                model: 'base',
+                systemSpeakerName: 'Meeting Participants',
+                microphoneSpeakerName: 'You',
+              }
+            );
+            
+            console.log('🗣️ Dual-stream transcription result:', transcriptionResult);
+            
+            if (transcriptionResult.success && transcriptionResult.text.trim()) {
+              console.log('RAW SPEAKER TRANSCRIPTION:', transcriptionResult.text);
+              // Apply speaker-specific formatting to clean up timestamps while preserving speaker labels
+              const formattedText = formatSpeakerTranscribedText(transcriptionResult.text.trim());
+              console.log('SPEAKER-IDENTIFIED TRANSCRIPTION:', formattedText);
+              setTranscriptionText(formattedText);
+              setIsPanelOpen(true);
+            } else {
+              console.error('❌ Dual-stream transcription failed:', transcriptionResult);
+            }
+          } catch (error) {
+            console.error('❌ Dual-stream transcription error:', error);
           }
-        } catch (error) {
-          console.error('❌ Transcription error:', error);
+        } 
+        // Fallback to single-stream transcription
+        else if (result.audioPath) {
+          console.log('🔄 Fallback to single-stream transcription for:', result.audioPath);
+          
+          try {
+            const transcriptionResult = await transcribe(result.audioPath, {
+              language: 'en',
+              threads: 8,
+              model: 'base',
+            });
+            
+            if (transcriptionResult.success && transcriptionResult.text.trim()) {
+              const formattedText = formatTranscribedText(transcriptionResult.text.trim());
+              setTranscriptionText(formattedText);
+              setIsPanelOpen(true);
+            }
+          } catch (error) {
+            console.error('❌ Single-stream transcription error:', error);
+          }
+        } else {
+          console.error('❌ No audio data available for transcription');
         }
       } else {
-        console.error('❌ Recording failed or no audio path:', result);
+        console.error('❌ Recording failed:', result);
       }
     } else {
       // Use dual audio capture for both system audio AND microphone simultaneously

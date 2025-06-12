@@ -10,6 +10,15 @@ interface TranscriptionResult {
   text: string;
   error?: string;
   duration?: number;
+  speakers?: SpeakerSegment[];
+}
+
+interface SpeakerSegment {
+  speaker: string;
+  text: string;
+  startTime: number;
+  endTime: number;
+  confidence?: number;
 }
 
 interface TranscriptionOptions {
@@ -86,6 +95,67 @@ export const useTranscription = () => {
     }
   }, []);
 
+  const transcribeDualStreams = useCallback(async (
+    systemAudioPath?: string,
+    microphoneAudioPath?: string,
+    options: TranscriptionOptions & {
+      systemSpeakerName?: string;
+      microphoneSpeakerName?: string;
+    } = {}
+  ): Promise<TranscriptionResult> => {
+    if (!window.electronAPI?.transcription) {
+      const error = 'Transcription API not available';
+      setState(prev => ({ ...prev, error }));
+      return { success: false, text: '', error };
+    }
+
+    setState(prev => ({ ...prev, isTranscribing: true, error: null }));
+
+    try {
+      console.log('🎙️ Starting dual-stream transcription with speaker diarization');
+      
+      const result = await window.electronAPI.transcription.transcribeDualStreams(
+        systemAudioPath,
+        microphoneAudioPath,
+        {
+          language: options.language || 'en',
+          threads: options.threads || 8,
+          model: options.model || 'base',
+          systemSpeakerName: options.systemSpeakerName || 'Meeting Participants',
+          microphoneSpeakerName: options.microphoneSpeakerName || 'You',
+        }
+      );
+
+      setState(prev => ({ ...prev, isTranscribing: false }));
+
+      if (result.success) {
+        console.log('✅ Dual-stream transcription successful with speaker identification');
+        return {
+          success: true,
+          text: result.text,
+          duration: result.duration,
+          speakers: result.speakers,
+        };
+      } else {
+        setState(prev => ({ ...prev, error: result.error || 'Dual-stream transcription failed' }));
+        return {
+          success: false,
+          text: '',
+          error: result.error,
+        };
+      }
+    } catch (error) {
+      setState(prev => ({ ...prev, isTranscribing: false }));
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setState(prev => ({ ...prev, error: errorMessage }));
+      return {
+        success: false,
+        text: '',
+        error: errorMessage,
+      };
+    }
+  }, []);
+
   const checkInstallation = useCallback(async () => {
     if (!window.electronAPI?.transcription) {
       return { installed: false, error: 'Transcription API not available' };
@@ -103,6 +173,7 @@ export const useTranscription = () => {
     isTranscribing: state.isTranscribing,
     error: state.error,
     transcribe,
+    transcribeDualStreams,
     checkInstallation,
   };
 };

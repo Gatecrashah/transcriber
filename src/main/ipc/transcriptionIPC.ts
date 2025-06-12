@@ -38,6 +38,30 @@ export class TranscriptionIPC {
       }
     });
 
+    // Transcribe dual streams with speaker diarization
+    ipcMain.handle('transcription:transcribe-dual-streams', async (
+      event, 
+      systemAudioPath?: string, 
+      microphoneAudioPath?: string, 
+      options: Record<string, unknown> = {}
+    ) => {
+      try {
+        console.log('Transcribing dual streams:', { systemAudioPath, microphoneAudioPath });
+        return await this.transcriptionManager.transcribeDualStreams(
+          systemAudioPath,
+          microphoneAudioPath,
+          options
+        );
+      } catch (error) {
+        console.error('Error transcribing dual streams:', error);
+        return {
+          text: '',
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        } as TranscriptionResult;
+      }
+    });
+
     // Start streaming transcription
     ipcMain.handle('transcription:start-stream', async (event, filePath: string) => {
       try {

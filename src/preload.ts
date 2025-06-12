@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   transcription: {
     checkInstallation: () => ipcRenderer.invoke('transcription:check-installation'),
     transcribeFile: (filePath: string, options?: Record<string, unknown>) => ipcRenderer.invoke('transcription:transcribe-file', filePath, options),
+    transcribeDualStreams: (systemAudioPath?: string, microphoneAudioPath?: string, options?: Record<string, unknown>) => ipcRenderer.invoke('transcription:transcribe-dual-streams', systemAudioPath, microphoneAudioPath, options),
     startStream: (filePath: string) => ipcRenderer.invoke('transcription:start-stream', filePath),
     onProgress: (callback: (text: string) => void) => {
       ipcRenderer.on('transcription:progress', (event, text) => callback(text));
@@ -43,7 +44,8 @@ declare global {
       };
       transcription: {
         checkInstallation: () => Promise<{ installed: boolean; error?: string }>;
-        transcribeFile: (filePath: string, options?: Record<string, unknown>) => Promise<{ text: string; success: boolean; error?: string; duration?: number }>;
+        transcribeFile: (filePath: string, options?: Record<string, unknown>) => Promise<{ text: string; success: boolean; error?: string; duration?: number; speakers?: any[] }>;
+        transcribeDualStreams: (systemAudioPath?: string, microphoneAudioPath?: string, options?: Record<string, unknown>) => Promise<{ text: string; success: boolean; error?: string; duration?: number; speakers?: any[] }>;
         startStream: (filePath: string) => Promise<{ text: string; success: boolean; error?: string }>;
         onProgress: (callback: (text: string) => void) => void;
         removeProgressListener: () => void;
