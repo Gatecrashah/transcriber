@@ -6,8 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Transcriper** is a sophisticated Electron-based transcription application that captures system audio and provides real-time AI-powered transcription using whisper.cpp. Built with TypeScript, React, and native Swift components for optimal macOS performance.
 
-### ✅ Current Status (v1.0 - Core Functionality Complete)
-- **Real-time System Audio Capture**: Swift-based CoreAudio integration
+### ✅ Current Status (v1.7 - Advanced Speaker Diarization Complete)
+- **Dual-Stream Audio Capture**: Simultaneous system audio + microphone recording
+- **Advanced Speaker Diarization**: Individual speaker identification using tinydiarize
+- **Voice Activity Detection (VAD)**: Performance optimization with quality filtering
 - **Local AI Transcription**: whisper.cpp with Apple Silicon GPU acceleration  
 - **Intelligent Text Formatting**: Advanced post-processing for readable transcripts
 - **Note Management System**: Local storage with CRUD operations
@@ -24,20 +26,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Whisper Integration**: `src/native/whisper/whisper.cpp/` - Local AI transcription engine
 
 ### Audio Processing Pipeline
-1. **System Audio Capture** (`src/native/swift/AudioCapture.swift`)
-   - CoreAudio integration for system-wide audio capture
-   - AVAudioEngine for high-quality audio processing
-   - Loopback audio support for capturing computer output
+1. **Dual-Stream Audio Capture** (`src/hooks/useAudioRecording.ts`)
+   - Simultaneous getDisplayMedia() + getUserMedia() capture
+   - Synchronized MediaRecorder instances for system audio and microphone
+   - Real-time audio level monitoring with Web Audio API AnalyserNodes
+   - Automatic format conversion and 48kHz → 16kHz resampling
 
-2. **Browser Audio Processing** (`src/hooks/useAudioRecording.ts`)
-   - getDisplayMedia() API for screen capture with audio
-   - Web Audio API for format conversion and resampling
-   - Automatic 48kHz → 16kHz resampling for Whisper compatibility
+2. **Voice Activity Detection** (`src/main/transcription/transcriptionManager.ts`)
+   - Pre-transcription VAD using whisper.cpp tiny model
+   - Quality-based confidence scoring and silence detection
+   - Hallucination pattern recognition and filtering
+   - Performance optimization by skipping silent segments
 
-3. **AI Transcription** (`src/main/transcription/transcriptionManager.ts`)
+3. **Advanced Speaker Diarization** (`src/main/transcription/transcriptionManager.ts`)
+   - Tinydiarize model integration for mono audio speaker separation
+   - [SPEAKER_TURN] marker parsing for speaker change detection
+   - Individual speaker identification (Speaker A, B, C, etc.)
+   - Robust fallback mechanisms with enhanced error handling
+
+4. **AI Transcription Engine** (`src/main/transcription/transcriptionManager.ts`)
    - whisper.cpp integration with model validation
    - Apple Silicon Metal GPU acceleration
-   - Multiple model support (tiny, base, small, medium, large-v3)
+   - Multiple model support (tiny, base, small, medium, large-v3, tinydiarize)
+   - Automatic model downloading and integrity validation
 
 ### State Management
 - **Audio Recording**: `src/hooks/useAudioRecording.ts` - Recording state and controls
@@ -57,6 +68,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Node.js**: 18+ for Electron compatibility
 - **Xcode**: For Swift compilation
 - **CMake**: For whisper.cpp compilation
+- **Tinydiarize Model**: 465MB model automatically downloaded via `download-tinydiarize-model.sh`
+
+### Speaker Diarization Setup
+To enable advanced speaker identification:
+```bash
+cd src/native/whisper/whisper.cpp/models
+./download-tinydiarize-model.sh
+```
+This downloads the small.en-tdrz model (465MB) for mono audio speaker separation.
 
 ## Build Configuration
 
@@ -113,47 +133,49 @@ The application has several security features enabled via Electron Fuses:
   - Add environment-specific configurations
   - Implement configuration validation
 
-## 🎙️ Phase 2: Dual Audio Capture & Speaker Diarization (Priority: CRITICAL)
-**Timeline: 3-4 weeks**
+## ✅ Phase 2: Dual Audio Capture & Speaker Diarization (COMPLETED)
+**Status: ✅ COMPLETED in v1.7**
 
-### Critical Audio Capture Fix
-- [ ] **Implement Dual-Stream Audio Capture** 🔥 **URGENT**
-  - **Problem**: Current implementation only captures system audio OR microphone, not both
-  - **Impact**: Missing user's voice in meetings - incomplete transcriptions
-  - **Solution**: Implement simultaneous capture like Granola app
-  
-  **Implementation Steps:**
-  - [ ] Create simultaneous `getDisplayMedia()` + `getUserMedia()` capture
-  - [ ] Implement dual MediaRecorder instances with synchronized timestamps
-  - [ ] Add audio stream mixing for combined transcription output
-  - [ ] Maintain separate channels for speaker identification
-  - [ ] Add fallback handling when one stream fails
-  - [ ] Update UI to show both audio sources are active
+### ✅ Dual-Stream Audio Capture Implementation
+- [x] **Simultaneous Audio Capture**
+  - [x] Implemented simultaneous `getDisplayMedia()` + `getUserMedia()` capture
+  - [x] Created dual MediaRecorder instances with synchronized timestamps
+  - [x] Added audio stream mixing for combined transcription output
+  - [x] Maintained separate channels for speaker identification
+  - [x] Added fallback handling when one stream fails
+  - [x] Updated UI to show both audio sources are active
 
-### Speaker Diarization Implementation
-- [ ] **Research Integration Options**
-  - Evaluate whisper.cpp built-in diarization (`--diarize` flag)
-  - Research pyannote.audio integration for advanced diarization
-  - Consider simple voice activity detection as intermediate step
+### ✅ Advanced Speaker Diarization Implementation
+- [x] **Tinydiarize Integration**
+  - [x] Downloaded and integrated tinydiarize model (small.en-tdrz, 465MB)
+  - [x] Implemented `--tinydiarize` flag support for mono audio diarization
+  - [x] Added [SPEAKER_TURN] marker parsing for speaker change detection
+  - [x] Created speaker labeling system (Speaker A, Speaker B, Speaker C, etc.)
 
-- [ ] **Core Diarization Features**
-  - [ ] **Basic Speaker Detection**
-    - Implement whisper.cpp diarization support
-    - Add speaker change detection in audio processing
-    - Create speaker labeling system (Speaker A, Speaker B, etc.)
-    - Leverage dual-stream capture for natural speaker separation
-  
-  - [ ] **Advanced Speaker Management**
-    - Allow custom speaker names/labels
-    - Implement speaker voice profile learning
-    - Add speaker timeline visualization
-    - Export speaker-separated transcriptions
+- [x] **Voice Activity Detection (VAD)**
+  - [x] Implemented pre-transcription VAD using whisper.cpp tiny model
+  - [x] Added quality-based confidence scoring and silence detection
+  - [x] Created hallucination pattern recognition and filtering
+  - [x] Optimized performance by skipping silent/low-quality segments
+
+- [x] **Enhanced Error Handling**
+  - [x] Added comprehensive fallback mechanisms
+  - [x] Implemented robust model validation and integrity checking
+  - [x] Created detailed diagnostic logging for troubleshooting
+  - [x] Added automatic model downloading with download-tinydiarize-model.sh
+
+### 🎯 Next Phase: Advanced Speaker Management
+- [ ] **Enhanced Speaker Features**
+  - [ ] Allow custom speaker names/labels (replace Speaker A/B/C with real names)
+  - [ ] Implement speaker voice profile learning for better consistency
+  - [ ] Add speaker timeline visualization in UI
+  - [ ] Export speaker-separated transcriptions to different formats
 
 - [ ] **UI Enhancements for Diarization**
-  - Design speaker-aware transcription display
-  - Add speaker color coding
-  - Implement speaker filtering/hiding options
-  - Create speaker statistics panel
+  - [ ] Add speaker color coding in transcription display
+  - [ ] Implement speaker filtering/hiding options
+  - [ ] Create speaker statistics panel showing talk time
+  - [ ] Add speaker confidence indicators
 
 ### Audio Quality Improvements
 - [ ] **Audio Preprocessing Pipeline**
@@ -307,6 +329,9 @@ The application has several security features enabled via Electron Fuses:
 
 ## Audio Processing Principles
 - **16kHz Compatibility**: Ensure all audio is resampled for Whisper
+- **Dual-Stream Architecture**: Maintain separate system and microphone channels
+- **Speaker Diarization**: Use tinydiarize for mono audio speaker separation
+- **Voice Activity Detection**: Pre-filter audio to optimize transcription performance
 - **Quality Preservation**: Maintain audio fidelity during processing
 - **Memory Efficiency**: Stream large audio files, avoid loading entirely
 - **Error Recovery**: Graceful handling of audio device failures
