@@ -133,8 +133,11 @@ export const App: React.FC = () => {
   const {
     isRecording,
     audioLevel,
-    startRecording,
-    startSystemAudioCapture,
+    systemAudioLevel,
+    microphoneAudioLevel,
+    systemAudioActive,
+    microphoneAudioActive,
+    startDualAudioCapture,
     stopRecording,
     error: audioError
   } = useAudioRecording();
@@ -220,8 +223,8 @@ export const App: React.FC = () => {
         console.error('❌ Recording failed or no audio path:', result);
       }
     } else {
-      // Use system audio capture for computer audio (not microphone)
-      await startSystemAudioCapture();
+      // Use dual audio capture for both system audio AND microphone simultaneously
+      await startDualAudioCapture();
     }
   };
 
@@ -336,18 +339,55 @@ export const App: React.FC = () => {
           ) : (
             <div className="recording-controls">
               <div className="audio-visualizer">
-                <div className="audio-bars">
-                  {[...Array(3)].map((_, i) => (
-                    <div
-                      key={i}
-                      className="audio-bar"
-                      style={{
-                        animationDelay: `${i * 0.1}s`,
-                        height: `${Math.min(100, 20 + audioLevel * 0.8)}%`,
-                      }}
-                    />
-                  ))}
-                </div>
+                {/* Show dual stream indicators when both are active */}
+                {systemAudioActive && microphoneAudioActive ? (
+                  <div className="dual-audio-bars">
+                    <div className="audio-stream">
+                      <div className="stream-label">🔊</div>
+                      <div className="audio-bars">
+                        {[...Array(2)].map((_, i) => (
+                          <div
+                            key={`sys-${i}`}
+                            className="audio-bar system-audio"
+                            style={{
+                              animationDelay: `${i * 0.1}s`,
+                              height: `${Math.min(100, 20 + systemAudioLevel * 0.8)}%`,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="audio-stream">
+                      <div className="stream-label">🎤</div>
+                      <div className="audio-bars">
+                        {[...Array(2)].map((_, i) => (
+                          <div
+                            key={`mic-${i}`}
+                            className="audio-bar microphone-audio"
+                            style={{
+                              animationDelay: `${i * 0.1 + 0.05}s`,
+                              height: `${Math.min(100, 20 + microphoneAudioLevel * 0.8)}%`,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Single stream fallback */
+                  <div className="audio-bars">
+                    {[...Array(3)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="audio-bar"
+                        style={{
+                          animationDelay: `${i * 0.1}s`,
+                          height: `${Math.min(100, 20 + audioLevel * 0.8)}%`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
               <button
                 className="stop-button"

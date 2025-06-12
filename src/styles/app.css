@@ -266,6 +266,48 @@ html, body {
   }
 }
 
+/* Dual Audio Stream Visualizer */
+.dual-audio-bars {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.audio-stream {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stream-label {
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.9;
+  font-weight: 500;
+}
+
+.audio-stream .audio-bars {
+  height: 24px;
+  gap: 3px;
+}
+
+.audio-stream .audio-bar {
+  width: 4px;
+  border-radius: 2px;
+  min-height: 4px;
+}
+
+.audio-bar.system-audio {
+  background: #3b82f6; /* Blue for system audio */
+  box-shadow: 0 0 4px rgba(59, 130, 246, 0.3);
+}
+
+.audio-bar.microphone-audio {
+  background: #10b981; /* Green for microphone */
+  box-shadow: 0 0 4px rgba(16, 185, 129, 0.3);
+}
+
 .stop-button {
   display: flex;
   align-items: center;

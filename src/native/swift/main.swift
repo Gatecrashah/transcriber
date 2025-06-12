@@ -25,6 +25,8 @@ class AudioCaptureApp {
         switch command {
         case "start":
             startRecording()
+        case "start-system":
+            startSystemRecording()
         case "stop":
             stopRecording()
         case "check-permissions":
@@ -39,30 +41,45 @@ class AudioCaptureApp {
         
         if audioCapture.startSystemAudioRecording() {
             print("Recording started successfully")
-            
-            // Keep the process alive while recording
-            isRunning = true
-            
-            // Setup signal handlers to stop recording gracefully
-            signal(SIGINT) { _ in
-                if let app = AudioCaptureApp.shared {
-                    app.handleTermination()
-                }
-            }
-            signal(SIGTERM) { _ in
-                if let app = AudioCaptureApp.shared {
-                    app.handleTermination()
-                }
-            }
-            
-            // Run the main loop to keep process alive
-            while isRunning {
-                RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
-            }
-            
+            runRecordingLoop()
         } else {
             print("Failed to start recording")
             exit(1)
+        }
+    }
+    
+    private func startSystemRecording() {
+        print("Starting system audio capture using macOS 14.4+ APIs...")
+        
+        if audioCapture.startSystemAudioCaptureNew() {
+            print("System audio capture started successfully")
+            runRecordingLoop()
+        } else {
+            print("Failed to start system audio capture")
+            print("This feature requires macOS 14.4+ and proper permissions")
+            exit(1)
+        }
+    }
+    
+    private func runRecordingLoop() {
+        // Keep the process alive while recording
+        isRunning = true
+        
+        // Setup signal handlers to stop recording gracefully
+        signal(SIGINT) { _ in
+            if let app = AudioCaptureApp.shared {
+                app.handleTermination()
+            }
+        }
+        signal(SIGTERM) { _ in
+            if let app = AudioCaptureApp.shared {
+                app.handleTermination()
+            }
+        }
+        
+        // Run the main loop to keep process alive
+        while isRunning {
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
         }
     }
     
@@ -100,9 +117,10 @@ class AudioCaptureApp {
     }
     
     private func printUsage() {
-        print("Usage: audio-capture [start|stop|check-permissions]")
+        print("Usage: audio-capture [start|start-system|stop|check-permissions]")
         print("Commands:")
-        print("  start              - Start recording system audio")
+        print("  start              - Start recording microphone input")
+        print("  start-system       - Start system audio capture (macOS 14.4+)")
         print("  stop               - Stop current recording")
         print("  check-permissions  - Check if audio permissions are granted")
     }

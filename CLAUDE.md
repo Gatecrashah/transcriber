@@ -113,8 +113,22 @@ The application has several security features enabled via Electron Fuses:
   - Add environment-specific configurations
   - Implement configuration validation
 
-## 🎙️ Phase 2: Speaker Diarization & Audio Features (Priority: HIGH)  
+## 🎙️ Phase 2: Dual Audio Capture & Speaker Diarization (Priority: CRITICAL)
 **Timeline: 3-4 weeks**
+
+### Critical Audio Capture Fix
+- [ ] **Implement Dual-Stream Audio Capture** 🔥 **URGENT**
+  - **Problem**: Current implementation only captures system audio OR microphone, not both
+  - **Impact**: Missing user's voice in meetings - incomplete transcriptions
+  - **Solution**: Implement simultaneous capture like Granola app
+  
+  **Implementation Steps:**
+  - [ ] Create simultaneous `getDisplayMedia()` + `getUserMedia()` capture
+  - [ ] Implement dual MediaRecorder instances with synchronized timestamps
+  - [ ] Add audio stream mixing for combined transcription output
+  - [ ] Maintain separate channels for speaker identification
+  - [ ] Add fallback handling when one stream fails
+  - [ ] Update UI to show both audio sources are active
 
 ### Speaker Diarization Implementation
 - [ ] **Research Integration Options**
@@ -127,6 +141,7 @@ The application has several security features enabled via Electron Fuses:
     - Implement whisper.cpp diarization support
     - Add speaker change detection in audio processing
     - Create speaker labeling system (Speaker A, Speaker B, etc.)
+    - Leverage dual-stream capture for natural speaker separation
   
   - [ ] **Advanced Speaker Management**
     - Allow custom speaker names/labels
