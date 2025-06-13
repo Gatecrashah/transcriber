@@ -41,7 +41,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. **Advanced Speaker Diarization** (`src/main/transcription/transcriptionManager.ts`)
    - Tinydiarize model integration for mono audio speaker separation
    - [SPEAKER_TURN] marker parsing for speaker change detection
-   - Individual speaker identification (Speaker A, B, C, etc.)
+   - Individual speaker identification (Speaker A, B, C, etc.) - [not implemented]
    - Robust fallback mechanisms with enhanced error handling
 
 4. **AI Transcription Engine** (`src/main/transcription/transcriptionManager.ts`)
@@ -98,9 +98,220 @@ The application has several security features enabled via Electron Fuses:
 
 ---
 
-# 🚀 Development Roadmap & TODO List
+# 🚀 Comprehensive Improvement Plan for Transcriper
 
-## 🎯 Phase 1: Code Quality & Stability (Priority: HIGH)
+## Phase 1: Critical Security & ESLint Fixes (Week 1)
+**Priority: CRITICAL - Must be done first**
+
+### 1.1 Fix Security Vulnerabilities (Day 1)
+- [ ] **brace-expansion ReDoS** (Low severity): Run `npm audit fix` to update
+- [ ] **webpack-dev-server vulnerabilities** (Moderate): Requires @electron-forge/plugin-webpack downgrade (breaking change)
+  - Decision needed: Accept breaking change or find alternative webpack configuration
+
+### 1.2 Fix Critical ESLint Errors (Day 1-2)
+- [ ] **App.tsx:92** - Remove unnecessary escape character in regex: `[.\-[\]]+` → `[.[\]-]+`
+- [ ] **index.ts:6** - Replace `require('electron-squirrel-startup')` with proper import
+- [ ] **transcriptionManager.ts:968** - Replace `require('child_process')` with import at top
+
+### 1.3 Extract Text Formatting Logic (Day 2-3)
+- [ ] Create `src/utils/textFormatter.ts` with:
+  - `formatSpeakerTranscribedText()` function (140+ lines from App.tsx:18-160)
+  - `formatTranscribedText()` function with comprehensive regex patterns
+  - Proper TypeScript interfaces for formatting options
+  - Unit tests for all formatting functions
+
+## Phase 2: TypeScript & Type Safety (Week 2)
+**Priority: HIGH - Foundation for maintainability**
+
+### 2.1 Remove All `any` Types (Day 1-3)
+- [ ] **preload.ts**: Replace 3 `any` types with proper interfaces
+- [ ] **transcriptionManager.ts**: Replace 4 `any` types in JSON parsing
+- [ ] **useAudioRecording.ts**: Replace `any` type with proper audio interface
+- [ ] **Homepage.tsx**: Define proper type for note objects
+
+### 2.2 Add Missing Interfaces (Day 3-4)
+- [ ] Create `src/types/audio.ts` for audio-related TypeScript interfaces
+- [ ] Create `src/types/transcription.ts` for transcription TypeScript interfaces
+- [ ] Add runtime type validation using zod or similar library
+
+### 2.3 Clean Up Unused Variables (Day 4-5)
+- [ ] Remove 6 unused variables across multiple files
+- [ ] Fix import naming issues in NotepadEditor.tsx
+
+## Phase 3: Architecture & Performance (Week 3-4)
+**Priority: MEDIUM - Long-term maintainability**
+
+### 3.1 Modularize TranscriptionManager (Week 3)
+- [ ] Split 1046-line file into focused modules:
+  - `src/main/transcription/core/` - Core transcription logic
+  - `src/main/transcription/speaker/` - Speaker diarization
+  - `src/main/transcription/audio/` - Audio analysis & VAD
+  - `src/main/transcription/formatters/` - Output formatting
+
+### 3.2 Performance Optimizations (Week 4)
+- [ ] Implement caching for model validation results
+- [ ] Optimize regex-heavy text processing functions
+- [ ] Add streaming support for large audio files
+- [ ] Memory usage monitoring and cleanup
+
+### 3.3 Error Handling & Resilience (Week 4)
+- [ ] Add React Error Boundaries for component failures
+- [ ] Implement comprehensive IPC error handling
+- [ ] Add retry mechanisms for failed transcriptions
+- [ ] Graceful degradation when models unavailable
+
+## Phase 4: Testing & Quality Assurance (Week 5-6)
+**Priority: HIGH - Essential for reliability**
+
+### 4.1 Unit Testing Framework (Week 5)
+- [ ] Set up Jest with TypeScript support
+- [ ] Create mock audio devices for testing
+- [ ] Test text formatting functions (extracted in Phase 1)
+- [ ] Test transcription pipeline components
+
+### 4.2 Integration Testing (Week 6)
+- [ ] End-to-end audio capture and transcription tests
+- [ ] UI component testing with React Testing Library
+- [ ] Error scenario testing
+- [ ] Cross-platform compatibility verification
+
+## Phase 5: Dependency Updates (Week 7)
+**Priority: MEDIUM - After core stability achieved**
+
+### 5.1 Major Version Updates
+- [ ] **TypeScript**: 4.5.4 → 5.8.3 (requires migration planning)
+- [ ] **ESLint**: 5.62.0 → 8.34.0 (configuration updates needed)
+- [ ] **React Types**: Minor updates safe to apply
+
+### 5.2 Development Tooling
+- [ ] Update webpack and build tools
+- [ ] Ensure compatibility with new TypeScript version
+- [ ] Update development scripts
+
+## Risk Assessment & Mitigation
+
+### High Risk Items
+1. **TypeScript 5.x migration** - May break existing code
+   - Mitigation: Create feature branch, test thoroughly
+2. **Webpack dev server fix** - Breaking change required
+   - Mitigation: Evaluate if development features are needed
+
+### Success Metrics
+- [ ] 0 ESLint errors and warnings
+- [ ] 0 security vulnerabilities
+- [ ] 100% TypeScript strict mode compliance
+- [ ] <200ms audio processing startup time
+- [ ] Comprehensive test coverage >80%
+
+**Estimated Timeline: 7 weeks total**
+- **Week 1**: Critical fixes (security + ESLint)
+- **Week 2**: Type safety improvements  
+- **Week 3-4**: Architecture refactoring
+- **Week 5-6**: Testing implementation
+- **Week 7**: Dependency updates
+
+## Phase 6: Transcription-Note Linking & Data Integrity (Week 8)
+**Priority: HIGH - Critical UX Issue**
+
+### 6.1 Fix Transcription-Note Association Bug (Day 1-2)
+- [ ] **Investigate Current Issue**: Transcriptions appear in all notes instead of specific meetings
+- [ ] **Implement Note-Specific Transcription Storage**
+  - Link transcriptions to specific note IDs
+  - Update data model to store transcription-note associations
+  - Modify transcription panel to only show current note's transcriptions
+- [ ] **Update Storage Architecture**
+  - Separate transcription storage per note
+  - Add transcription metadata (note ID, timestamp, session info)
+  - Implement transcription cleanup when notes are deleted
+
+### 6.2 Enhanced Note Management (Day 3-5)
+- [ ] **Meeting Type Classification**
+  - Add meeting type selection (1:1, Team Meeting, Client Call, Interview, etc.)
+  - Store meeting type metadata with notes
+  - UI dropdown/selector for meeting types during note creation
+- [ ] **Transcription History**
+  - Show transcription history per note
+  - Allow viewing/editing previous transcriptions within a note
+  - Export transcriptions separately from notes
+
+## Phase 7: LLM-Based Meeting Enhancement System (Week 9-12)
+**Priority: MEDIUM - Advanced Feature - Requires Extensive Planning**
+
+### 7.1 LLM Integration Architecture (Week 9)
+- [ ] **Qwen 2-7B Q4_K_M Model Integration**
+  - Research local deployment options (llama.cpp, Ollama, etc.)
+  - Set up model loading and inference pipeline
+  - Implement memory-efficient model management
+  - Add model download and validation system
+
+### 7.2 Prompt Template System (Week 10)
+- [ ] **Custom Prompt Template Engine**
+  - Create template system for different meeting types
+  - Support variable injection (notes, transcription, meeting type)
+  - Template editor UI for advanced users
+  - Default templates for common meeting scenarios
+- [ ] **Context Management**
+  - Combine user notes + transcription + meeting type as context
+  - Implement context length management (chunking for long meetings)
+  - Smart context prioritization (recent content, key points)
+
+### 7.3 Meeting Enhancement Features (Week 11)
+- [ ] **Summarization Pipeline**
+  - Generate meeting summaries based on transcription + notes
+  - Key points extraction and highlighting
+  - Action items identification and formatting
+  - Decision tracking and outcomes summary
+- [ ] **Note Enhancement Options**
+  - Grammar and clarity improvements
+  - Professional formatting suggestions
+  - Missing information detection
+  - Follow-up recommendations
+
+### 7.4 LLM Processing UI & Controls (Week 12)
+- [ ] **Processing Interface**
+  - Progress indicators for LLM processing
+  - Cancel/abort long-running operations
+  - Batch processing for multiple notes
+  - Quality indicators for generated content
+- [ ] **Review & Edit System**
+  - Side-by-side comparison (original vs enhanced)
+  - Selective application of suggestions
+  - Undo/redo for LLM enhancements
+  - User feedback collection for model improvement
+
+### 7.5 Advanced LLM Features (Future)
+- [ ] **Meeting Type-Specific Processing**
+  - Custom prompts per meeting type
+  - Role-based analysis (participant identification)
+  - Industry-specific terminology and formatting
+- [ ] **Multi-Session Analysis**
+  - Connect related meetings over time
+  - Project/client-based context awareness
+  - Long-term relationship and decision tracking
+
+## Risk Assessment for New Features
+
+### High Risk Items
+1. **LLM Model Size & Performance** - 7B model may be too large for some systems
+   - Mitigation: Offer smaller model options
+2. **Transcription-Note Linking Migration** - No critical existing data at the moment, so no migration need.
+3. **Privacy Concerns with LLM Processing** - Sensitive meeting data
+   - Mitigation: Local-only processing
+
+### Success Metrics for New Phases
+- [ ] 100% transcription-note association accuracy
+- [ ] <30s LLM processing time for typical meetings
+- [ ] >90% user satisfaction with generated summaries
+- [ ] Zero data leakage between unrelated notes
+
+**Updated Estimated Timeline: 12 weeks total**
+- **Week 1-7**: Core stability and architecture (as planned above)
+- **Week 8**: Transcription-note linking fixes
+- **Week 9-12**: LLM-based meeting enhancement system
+
+---
+
+## 🎯 Legacy Roadmap: Code Quality & Stability (Priority: HIGH)
 **Timeline: 2-3 weeks**
 
 ### Technical Debt Resolution

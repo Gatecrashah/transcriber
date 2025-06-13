@@ -1,0 +1,176 @@
+/* Error Boundary Styles */
+
+.error-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  padding: 2rem;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  margin: 1rem;
+}
+
+.error-content {
+  text-align: center;
+  max-width: 600px;
+  width: 100%;
+}
+
+.error-icon {
+  color: #dc3545;
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.error-boundary h2 {
+  color: #495057;
+  margin-bottom: 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.error-message {
+  color: #6c757d;
+  margin-bottom: 1.5rem;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.error-details {
+  text-align: left;
+  margin: 1.5rem 0;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  background: #f8f9fa;
+}
+
+.error-details summary {
+  padding: 0.75rem;
+  background: #e9ecef;
+  cursor: pointer;
+  font-weight: 500;
+  border-radius: 4px 4px 0 0;
+}
+
+.error-details summary:hover {
+  background: #dee2e6;
+}
+
+.error-stack {
+  padding: 1rem;
+  margin: 0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: #495057;
+  background: #ffffff;
+  border: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.error-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.retry-button,
+.reload-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.retry-button {
+  background: #007bff;
+  color: white;
+}
+
+.retry-button:hover {
+  background: #0056b3;
+  transform: translateY(-1px);
+}
+
+.reload-button {
+  background: #6c757d;
+  color: white;
+}
+
+.reload-button:hover {
+  background: #545b62;
+  transform: translateY(-1px);
+}
+
+.retry-button:active,
+.reload-button:active {
+  transform: translateY(0);
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .error-boundary {
+    background: #1a1a1a;
+    border-color: #404040;
+  }
+
+  .error-boundary h2 {
+    color: #e9ecef;
+  }
+
+  .error-message {
+    color: #adb5bd;
+  }
+
+  .error-details {
+    background: #2d2d2d;
+    border-color: #404040;
+  }
+
+  .error-details summary {
+    background: #404040;
+    color: #e9ecef;
+  }
+
+  .error-details summary:hover {
+    background: #4a4a4a;
+  }
+
+  .error-stack {
+    background: #1a1a1a;
+    color: #e9ecef;
+  }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .error-boundary {
+    padding: 1rem;
+    margin: 0.5rem;
+  }
+
+  .error-actions {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .retry-button,
+  .reload-button {
+    width: 100%;
+    max-width: 200px;
+  }
+}

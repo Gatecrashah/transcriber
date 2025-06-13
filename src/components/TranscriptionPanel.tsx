@@ -1,23 +1,26 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Copy, Plus, Trash2, FileText } from 'lucide-react';
+import type { NoteTranscription } from '../types/notes';
 
 interface TranscriptionSegment {
   id: string;
   text: string;
   timestamp: Date;
   inserted: boolean;
+  speaker?: string; // Added speaker information for chat-bubble display
+  transcriptionId: string; // Link to parent NoteTranscription
 }
 
 interface TranscriptionPanelProps {
   isOpen: boolean;
-  transcriptionText: string;
+  noteTranscriptions: NoteTranscription[];
   onClose: () => void;
   onInsertToNotepad: (text: string) => void;
 }
 
 export const TranscriptionPanel: React.FC<TranscriptionPanelProps> = ({
   isOpen,
-  transcriptionText,
+  noteTranscriptions,
   onClose,
   onInsertToNotepad,
 }) => {
@@ -25,18 +28,47 @@ export const TranscriptionPanel: React.FC<TranscriptionPanelProps> = ({
   const [selectedSegments, setSelectedSegments] = useState<Set<string>>(new Set());
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Add new transcription text as segments
+  // Convert NoteTranscriptions to display segments
+  const convertTranscriptionsToSegments = (transcriptions: NoteTranscription[]): TranscriptionSegment[] => {
+    const segments: TranscriptionSegment[] = [];
+    
+    transcriptions.forEach(transcription => {
+      if (transcription.speakers && transcription.speakers.length > 0) {
+        // Transcription has speaker segments
+        transcription.speakers.forEach((speaker, index) => {
+          segments.push({
+            id: `${transcription.id}-speaker-${index}`,
+            text: speaker.text,
+            timestamp: transcription.timestamp,
+            inserted: false,
+            speaker: speaker.speaker,
+            transcriptionId: transcription.id
+          });
+        });
+      } else {
+        // Single transcription without speaker segments
+        segments.push({
+          id: `${transcription.id}-full`,
+          text: transcription.text,
+          timestamp: transcription.timestamp,
+          inserted: false,
+          speaker: undefined,
+          transcriptionId: transcription.id
+        });
+      }
+    });
+    
+    // Sort by timestamp (newest first)
+    return segments.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  };
+
+  // Update segments when noteTranscriptions change
   useEffect(() => {
-    if (transcriptionText.trim()) {
-      const newSegment: TranscriptionSegment = {
-        id: Date.now().toString(),
-        text: transcriptionText.trim(),
-        timestamp: new Date(),
-        inserted: false,
-      };
-      setSegments(prev => [newSegment, ...prev]);
-    }
-  }, [transcriptionText]);
+    const newSegments = convertTranscriptionsToSegments(noteTranscriptions);
+    setSegments(newSegments);
+    // Clear selections when transcriptions change
+    setSelectedSegments(new Set());
+  }, [noteTranscriptions]);
 
   const handleInsertSegment = (segment: TranscriptionSegment) => {
     onInsertToNotepad(segment.text);
@@ -98,6 +130,7 @@ export const TranscriptionPanel: React.FC<TranscriptionPanelProps> = ({
     });
   };
 
+
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { 
       hour: '2-digit', 
@@ -147,53 +180,112 @@ export const TranscriptionPanel: React.FC<TranscriptionPanelProps> = ({
           </div>
         ) : (
           <div className="segments-list">
-            {segments.map((segment) => (
-              <div 
-                key={segment.id}
-                className={`segment ${segment.inserted ? 'inserted' : ''} ${selectedSegments.has(segment.id) ? 'selected' : ''}`}
-              >
-                <div className="segment-header">
-                  <input
-                    type="checkbox"
-                    checked={selectedSegments.has(segment.id)}
-                    onChange={() => toggleSegmentSelection(segment.id)}
-                    className="segment-checkbox"
-                  />
-                  <span className="segment-time">{formatTime(segment.timestamp)}</span>
-                  <div className="segment-actions">
-                    <button
-                      className="action-button"
-                      onClick={() => handleCopySegment(segment.text)}
-                      title="Copy to clipboard"
-                    >
-                      <Copy size={14} />
-                    </button>
-                    {!segment.inserted && (
-                      <button
-                        className="action-button primary"
-                        onClick={() => handleInsertSegment(segment)}
-                        title="Insert into notepad"
-                      >
-                        <Plus size={14} />
-                      </button>
-                    )}
-                    <button
-                      className="action-button danger"
-                      onClick={() => handleDeleteSegment(segment.id)}
-                      title="Delete transcription"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+            {segments.map((segment) => {
+              // Determine if this should be displayed as a chat bubble
+              const isChatBubble = segment.speaker !== undefined;
+              const isUserSpeaker = segment.speaker === 'You';
+              
+              if (isChatBubble) {
+                // Render as Granola-style chat bubble
+                return (
+                  <div 
+                    key={segment.id}
+                    className={`chat-bubble-container ${isUserSpeaker ? 'user-speaker' : 'other-speaker'} ${selectedSegments.has(segment.id) ? 'selected' : ''}`}
+                    data-speaker={segment.speaker}
+                  >
+                    <div className="chat-bubble-controls">
+                      <input
+                        type="checkbox"
+                        checked={selectedSegments.has(segment.id)}
+                        onChange={() => toggleSegmentSelection(segment.id)}
+                        className="chat-bubble-checkbox"
+                      />
+                      <div className="chat-bubble-actions">
+                        <button
+                          className="action-button"
+                          onClick={() => handleCopySegment(segment.text)}
+                          title="Copy to clipboard"
+                        >
+                          <Copy size={12} />
+                        </button>
+                        {!segment.inserted && (
+                          <button
+                            className="action-button primary"
+                            onClick={() => handleInsertSegment(segment)}
+                            title="Insert into notepad"
+                          >
+                            <Plus size={12} />
+                          </button>
+                        )}
+                        <button
+                          className="action-button danger"
+                          onClick={() => handleDeleteSegment(segment.id)}
+                          title="Delete transcription"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className={`chat-bubble ${segment.inserted ? 'inserted' : ''}`}>
+                      <div className="chat-bubble-text">{segment.text}</div>
+                      {segment.inserted && (
+                        <span className="inserted-badge">✓</span>
+                      )}
+                    </div>
+                    <div className="chat-bubble-time">{formatTime(segment.timestamp)}</div>
                   </div>
-                </div>
-                <div className="segment-text">
-                  {segment.text}
-                  {segment.inserted && (
-                    <span className="inserted-badge">Inserted</span>
-                  )}
-                </div>
-              </div>
-            ))}
+                );
+              } else {
+                // Render as traditional segment for non-speaker content
+                return (
+                  <div 
+                    key={segment.id}
+                    className={`segment ${segment.inserted ? 'inserted' : ''} ${selectedSegments.has(segment.id) ? 'selected' : ''}`}
+                  >
+                    <div className="segment-header">
+                      <input
+                        type="checkbox"
+                        checked={selectedSegments.has(segment.id)}
+                        onChange={() => toggleSegmentSelection(segment.id)}
+                        className="segment-checkbox"
+                      />
+                      <span className="segment-time">{formatTime(segment.timestamp)}</span>
+                      <div className="segment-actions">
+                        <button
+                          className="action-button"
+                          onClick={() => handleCopySegment(segment.text)}
+                          title="Copy to clipboard"
+                        >
+                          <Copy size={14} />
+                        </button>
+                        {!segment.inserted && (
+                          <button
+                            className="action-button primary"
+                            onClick={() => handleInsertSegment(segment)}
+                            title="Insert into notepad"
+                          >
+                            <Plus size={14} />
+                          </button>
+                        )}
+                        <button
+                          className="action-button danger"
+                          onClick={() => handleDeleteSegment(segment.id)}
+                          title="Delete transcription"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="segment-text">
+                      {segment.text}
+                      {segment.inserted && (
+                        <span className="inserted-badge">Inserted</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+            })}
           </div>
         )}
       </div>

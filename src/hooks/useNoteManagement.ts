@@ -1,12 +1,5 @@
 import { useState, useCallback } from 'react';
-
-export interface Note {
-  id: string;
-  title: string;
-  content: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import type { Note, NoteTranscription, SerializedNote } from '../types/notes';
 
 export const useNoteManagement = () => {
   const [currentNote, setCurrentNote] = useState<Note | null>(null);
@@ -17,29 +10,54 @@ export const useNoteManagement = () => {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
   };
 
+  const serializeNote = (note: Note): SerializedNote => {
+    return {
+      ...note,
+      createdAt: note.createdAt.toISOString(),
+      updatedAt: note.updatedAt.toISOString(),
+      transcriptions: note.transcriptions?.map(t => ({
+        ...t,
+        timestamp: t.timestamp.toISOString()
+      }))
+    };
+  };
+
+  const deserializeNote = (serializedNote: SerializedNote): Note => {
+    return {
+      ...serializedNote,
+      createdAt: new Date(serializedNote.createdAt),
+      updatedAt: new Date(serializedNote.updatedAt),
+      transcriptions: serializedNote.transcriptions?.map(t => ({
+        ...t,
+        timestamp: new Date(t.timestamp)
+      }))
+    };
+  };
+
   const saveNote = useCallback((note: Note) => {
     try {
       const savedNotes = localStorage.getItem('transcriper-notes');
-      let notes: Note[] = [];
+      let notes: SerializedNote[] = [];
       
       if (savedNotes) {
         notes = JSON.parse(savedNotes);
       }
 
+      const serializedNote = serializeNote(note);
       const existingIndex = notes.findIndex(n => n.id === note.id);
       
       if (existingIndex >= 0) {
         // Update existing note
         notes[existingIndex] = {
-          ...note,
-          updatedAt: new Date(),
+          ...serializedNote,
+          updatedAt: new Date().toISOString(),
         };
       } else {
         // Add new note
         notes.push({
-          ...note,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          ...serializedNote,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         });
       }
 
@@ -58,6 +76,7 @@ export const useNoteManagement = () => {
       content: '',
       createdAt: new Date(),
       updatedAt: new Date(),
+      transcriptions: [],
     };
     
     setCurrentNote(newNote);
@@ -79,7 +98,7 @@ export const useNoteManagement = () => {
     setCurrentNote(null);
   }, [currentNote, saveNote]);
 
-  const updateCurrentNote = useCallback((updates: Partial<Pick<Note, 'title' | 'content'>>) => {
+  const updateCurrentNote = useCallback((updates: Partial<Pick<Note, 'title' | 'content' | 'meetingType'>>) => {
     if (currentNote) {
       const updatedNote = {
         ...currentNote,
@@ -95,11 +114,39 @@ export const useNoteManagement = () => {
     }
   }, [currentNote, saveNote]);
 
+  const addTranscriptionToCurrentNote = useCallback((transcription: NoteTranscription) => {
+    if (currentNote) {
+      const updatedNote = {
+        ...currentNote,
+        transcriptions: [...(currentNote.transcriptions || []), transcription],
+        updatedAt: new Date(),
+      };
+      setCurrentNote(updatedNote);
+      saveNote(updatedNote);
+      return true;
+    }
+    return false;
+  }, [currentNote, saveNote]);
+
+  const removeTranscriptionFromCurrentNote = useCallback((transcriptionId: string) => {
+    if (currentNote) {
+      const updatedNote = {
+        ...currentNote,
+        transcriptions: currentNote.transcriptions?.filter(t => t.id !== transcriptionId) || [],
+        updatedAt: new Date(),
+      };
+      setCurrentNote(updatedNote);
+      saveNote(updatedNote);
+      return true;
+    }
+    return false;
+  }, [currentNote, saveNote]);
+
   const deleteNote = useCallback((noteId: string) => {
     try {
       const savedNotes = localStorage.getItem('transcriper-notes');
       if (savedNotes) {
-        const notes: Note[] = JSON.parse(savedNotes);
+        const notes: SerializedNote[] = JSON.parse(savedNotes);
         const filteredNotes = notes.filter(note => note.id !== noteId);
         localStorage.setItem('transcriper-notes', JSON.stringify(filteredNotes));
       }
@@ -109,6 +156,30 @@ export const useNoteManagement = () => {
       return false;
     }
   }, []);
+
+  const loadNotes = useCallback((): Note[] => {
+    try {
+      const savedNotes = localStorage.getItem('transcriper-notes');
+      if (savedNotes) {
+        const serializedNotes: SerializedNote[] = JSON.parse(savedNotes);
+        return serializedNotes.map(deserializeNote);
+      }
+      return [];
+    } catch (error) {
+      console.error('Failed to load notes:', error);
+      return [];
+    }
+  }, []);
+
+  const loadNote = useCallback((noteId: string): Note | null => {
+    try {
+      const notes = loadNotes();
+      return notes.find(note => note.id === noteId) || null;
+    } catch (error) {
+      console.error('Failed to load note:', error);
+      return null;
+    }
+  }, [loadNotes]);
 
   return {
     currentNote,
@@ -121,5 +192,9 @@ export const useNoteManagement = () => {
     updateCurrentNote,
     saveNote,
     deleteNote,
+    loadNotes,
+    loadNote,
+    addTranscriptionToCurrentNote,
+    removeTranscriptionFromCurrentNote,
   };
 };

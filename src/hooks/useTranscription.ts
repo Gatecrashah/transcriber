@@ -1,33 +1,15 @@
 import { useState, useCallback } from 'react';
+import type { 
+  TranscriptionResult, 
+  TranscriptionOptions as ITranscriptionOptions
+} from '../types/transcription';
 
 interface TranscriptionState {
   isTranscribing: boolean;
   error: string | null;
 }
 
-interface TranscriptionResult {
-  success: boolean;
-  text: string;
-  error?: string;
-  duration?: number;
-  speakers?: SpeakerSegment[];
-}
-
-interface SpeakerSegment {
-  speaker: string;
-  text: string;
-  startTime: number;
-  endTime: number;
-  confidence?: number;
-}
-
-interface TranscriptionOptions {
-  language?: string;
-  threads?: number;
-  model?: string;
-  temperature?: number;
-  beam_size?: number;
-}
+type TranscriptionOptions = ITranscriptionOptions;
 
 export const useTranscription = () => {
   const [state, setState] = useState<TranscriptionState>({
@@ -59,9 +41,7 @@ export const useTranscription = () => {
       const result = await window.electronAPI.transcription.transcribeFile(audioPath, {
         language: options.language || 'auto',
         threads: options.threads || 4,
-        model: options.model || 'base',
-        temperature: options.temperature || 0,
-        beam_size: options.beam_size || 5,
+        model: (options.model || 'base') as 'tiny' | 'base' | 'small' | 'medium' | 'large' | 'large-v3',
       });
 
       // Clean up progress listener
@@ -120,7 +100,7 @@ export const useTranscription = () => {
         {
           language: options.language || 'en',
           threads: options.threads || 8,
-          model: options.model || 'base',
+          model: (options.model || 'base') as 'tiny' | 'base' | 'small' | 'medium' | 'large' | 'large-v3',
           systemSpeakerName: options.systemSpeakerName || 'Meeting Participants',
           microphoneSpeakerName: options.microphoneSpeakerName || 'You',
         }

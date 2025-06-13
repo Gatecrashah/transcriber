@@ -549,7 +549,7 @@ export const useAudioRecording = () => {
               noiseSuppression: false,
               autoGainControl: false
             }
-          } as any,
+          } as MediaTrackConstraints,
           video: false
         });
         

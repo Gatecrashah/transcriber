@@ -1,4 +1,18 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { 
+  AudioInitializationResult, 
+  AudioDeviceResult, 
+  AudioRecordingResult, 
+  AudioLevelResult, 
+  AudioStatusResult, 
+  AudioSaveResult, 
+  DesktopSourcesResult 
+} from './types/audio';
+import type { 
+  TranscriptionResult, 
+  TranscriptionInstallationResult, 
+  TranscriptionOptions
+} from './types/transcription';
 
 // Expose audio and transcription APIs to renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -15,11 +29,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   transcription: {
     checkInstallation: () => ipcRenderer.invoke('transcription:check-installation'),
-    transcribeFile: (filePath: string, options?: Record<string, unknown>) => ipcRenderer.invoke('transcription:transcribe-file', filePath, options),
-    transcribeDualStreams: (systemAudioPath?: string, microphoneAudioPath?: string, options?: Record<string, unknown>) => ipcRenderer.invoke('transcription:transcribe-dual-streams', systemAudioPath, microphoneAudioPath, options),
+    transcribeFile: (filePath: string, options?: TranscriptionOptions) => ipcRenderer.invoke('transcription:transcribe-file', filePath, options),
+    transcribeDualStreams: (systemAudioPath?: string, microphoneAudioPath?: string, options?: TranscriptionOptions) => ipcRenderer.invoke('transcription:transcribe-dual-streams', systemAudioPath, microphoneAudioPath, options),
     startStream: (filePath: string) => ipcRenderer.invoke('transcription:start-stream', filePath),
     onProgress: (callback: (text: string) => void) => {
-      ipcRenderer.on('transcription:progress', (event, text) => callback(text));
+      ipcRenderer.on('transcription:progress', (_event, text) => callback(text));
     },
     removeProgressListener: () => {
       ipcRenderer.removeAllListeners('transcription:progress');
@@ -32,21 +46,21 @@ declare global {
   interface Window {
     electronAPI: {
       audio: {
-        initialize: () => Promise<{ success: boolean; error?: string }>;
-        getDevices: () => Promise<{ success: boolean; devices?: any[]; error?: string }>;
-        startRecording: () => Promise<{ success: boolean; error?: string }>;
-        startSystemCapture: () => Promise<{ success: boolean; error?: string }>;
-        stopRecording: () => Promise<{ success: boolean; audioPath?: string; error?: string }>;
-        getLevel: () => Promise<{ success: boolean; level?: number; error?: string }>;
-        isRecording: () => Promise<{ success: boolean; isRecording?: boolean; error?: string }>;
-        saveAudioFile: (audioData: ArrayBuffer) => Promise<{ success: boolean; audioPath?: string; error?: string }>;
-        getDesktopSources: () => Promise<{ success: boolean; sources?: Array<{id: string; name: string}>; error?: string }>;
+        initialize: () => Promise<AudioInitializationResult>;
+        getDevices: () => Promise<AudioDeviceResult>;
+        startRecording: () => Promise<AudioInitializationResult>;
+        startSystemCapture: () => Promise<AudioInitializationResult>;
+        stopRecording: () => Promise<AudioRecordingResult>;
+        getLevel: () => Promise<AudioLevelResult>;
+        isRecording: () => Promise<AudioStatusResult>;
+        saveAudioFile: (audioData: ArrayBuffer) => Promise<AudioSaveResult>;
+        getDesktopSources: () => Promise<DesktopSourcesResult>;
       };
       transcription: {
-        checkInstallation: () => Promise<{ installed: boolean; error?: string }>;
-        transcribeFile: (filePath: string, options?: Record<string, unknown>) => Promise<{ text: string; success: boolean; error?: string; duration?: number; speakers?: any[] }>;
-        transcribeDualStreams: (systemAudioPath?: string, microphoneAudioPath?: string, options?: Record<string, unknown>) => Promise<{ text: string; success: boolean; error?: string; duration?: number; speakers?: any[] }>;
-        startStream: (filePath: string) => Promise<{ text: string; success: boolean; error?: string }>;
+        checkInstallation: () => Promise<TranscriptionInstallationResult>;
+        transcribeFile: (filePath: string, options?: TranscriptionOptions) => Promise<TranscriptionResult>;
+        transcribeDualStreams: (systemAudioPath?: string, microphoneAudioPath?: string, options?: TranscriptionOptions) => Promise<TranscriptionResult>;
+        startStream: (filePath: string) => Promise<TranscriptionResult>;
         onProgress: (callback: (text: string) => void) => void;
         removeProgressListener: () => void;
       };

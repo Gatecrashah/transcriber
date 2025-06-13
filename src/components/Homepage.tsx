@@ -1,13 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, FileText, Calendar, Search, Trash2 } from 'lucide-react';
-
-interface Note {
-  id: string;
-  title: string;
-  content: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import type { Note, SerializedNote } from '../types/notes';
 
 interface HomepageProps {
   onCreateNote: () => void;
@@ -28,10 +21,14 @@ export const Homepage: React.FC<HomepageProps> = ({ onCreateNote, onOpenNote, on
     try {
       const savedNotes = localStorage.getItem('transcriper-notes');
       if (savedNotes) {
-        const parsedNotes = JSON.parse(savedNotes).map((note: any) => ({
+        const parsedNotes = JSON.parse(savedNotes).map((note: SerializedNote) => ({
           ...note,
           createdAt: new Date(note.createdAt),
           updatedAt: new Date(note.updatedAt),
+          transcriptions: note.transcriptions?.map(t => ({
+            ...t,
+            timestamp: new Date(t.timestamp)
+          })) || []
         }));
         setNotes(parsedNotes.sort((a: Note, b: Note) => b.updatedAt.getTime() - a.updatedAt.getTime()));
       }
@@ -146,6 +143,12 @@ export const Homepage: React.FC<HomepageProps> = ({ onCreateNote, onOpenNote, on
                   </div>
                   {note.content && (
                     <p className="note-preview">{getPreviewText(note.content)}</p>
+                  )}
+                  {note.transcriptions && note.transcriptions.length > 0 && (
+                    <div className="transcription-indicator">
+                      <FileText size={14} />
+                      <span>{note.transcriptions.length} transcription{note.transcriptions.length !== 1 ? 's' : ''}</span>
+                    </div>
                   )}
                 </div>
                 <div className="note-meta">

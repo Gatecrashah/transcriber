@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { spawn } from 'child_process';
+import type { WhisperSegment } from '../../types/transcription';
 
 export interface TranscriptionResult {
   text: string;
@@ -64,6 +65,8 @@ export class TranscriptionManager {
   private hasTinydiarizeModel(): boolean {
     return this.getTinydiarizeModelPath() !== '';
   }
+
+
 
   private isValidModelFile(modelPath: string, modelName: string): boolean {
     try {
@@ -288,18 +291,19 @@ export class TranscriptionManager {
           
           // First try with diarization to detect multiple speakers
           console.log('🎙️ Attempting multi-speaker diarization within system audio...');
+          
+          // Check available diarization methods
           if (this.hasTinydiarizeModel()) {
-            console.log('✅ Using tinydiarize model for mono audio speaker diarization');
+            console.log('✅ Using tinydiarize model for speaker diarization');
           } else {
-            console.log('ℹ️ Note: tinydiarize model not found');
+            console.log('ℹ️ Note: No tinydiarize model found');
             console.log('   - Run download-tinydiarize-model.sh to enable speaker diarization');
-            console.log('   - Or consider implementing pyannote-audio for best results');
           }
           
           const systemResult = await this.transcribeFile(systemAudioPath, {
             ...options,
-            enableDiarization: true, // Enable diarization for multi-speaker detection
-            outputFormat: 'json', // JSON needed for speaker segments
+            enableDiarization: true, // Enable tinydiarize for multi-speaker detection
+            outputFormat: 'txt', // Use text output for tinydiarize
             speakerLabel: systemSpeaker
           });
           
@@ -319,12 +323,14 @@ export class TranscriptionManager {
             console.log('🔍 About to parse system audio for multiple speakers...');
             console.log('📋 System result text contains [SPEAKER_TURN]:', systemResult.text.includes('[SPEAKER_TURN]'));
             console.log('📋 System result text length:', systemResult.text.length);
-            console.log('🚨 ENTERING parseTranscriptionForMultipleSpeakers NOW...');
             
+            // Parse tinydiarize output
             const systemSegments = this.parseTranscriptionForMultipleSpeakers(
               systemResult.text, 
               'system'
             );
+            
+            console.log('📊 DIARIZATION METHOD USED: TINYDIARIZE');
             
             console.log('🎙️ Parsed system segments:', systemSegments.length);
             systemSegments.forEach((seg, i) => {
@@ -473,7 +479,7 @@ export class TranscriptionManager {
    */
   private parseTranscriptionForMultipleSpeakers(
     transcriptionText: string,
-    streamType: 'system' | 'microphone'
+    _streamType: 'system' | 'microphone'
   ): SpeakerSegment[] {
     const segments: SpeakerSegment[] = [];
     
@@ -500,8 +506,8 @@ export class TranscriptionManager {
         console.log(`Found ${jsonData.segments.length} segments for multi-speaker analysis`);
         
         // Debug: Log first few segments to understand structure
-        jsonData.segments.slice(0, 3).forEach((segment: any, index: number) => {
-          console.log(`🔍 Segment ${index}:`, {
+        jsonData.segments.slice(0, 3).forEach((segment: WhisperSegment, _index: number) => {
+          console.log(`🔍 Segment ${_index}:`, {
             speaker: segment.speaker,
             speaker_id: segment.speaker_id,
             text: segment.text?.substring(0, 50),
@@ -515,9 +521,9 @@ export class TranscriptionManager {
         const speakerMap = new Map<number, string>();
         let speakerCounter = 0;
         
-        jsonData.segments.forEach((segment: any) => {
+        jsonData.segments.forEach((segment: WhisperSegment) => {
           // whisper.cpp diarization typically provides speaker IDs as numbers
-          const speakerId = segment.speaker ?? segment.speaker_id ?? 0;
+          const speakerId = segment.speaker_id ?? (segment.speaker ? parseInt(segment.speaker, 10) || 0 : 0);
           
           // Map speaker IDs to friendly names
           if (!speakerMap.has(speakerId)) {
@@ -565,6 +571,8 @@ export class TranscriptionManager {
     return segments;
   }
 
+
+
   /**
    * Parse tinydiarize output with [SPEAKER_TURN] markers
    */
@@ -572,36 +580,58 @@ export class TranscriptionManager {
     const segments: SpeakerSegment[] = [];
     
     console.log('🎙️ Parsing tinydiarize [SPEAKER_TURN] markers...');
+    console.log('📋 Raw input text:', text.substring(0, 300) + '...');
     
     // Split text by [SPEAKER_TURN] markers
-    const parts = text.split(/\[SPEAKER_TURN\]/g);
+    const parts = text.split(/\[SPEAKER_TURN\]/gi); // Case-insensitive split
     
-    console.log(`📊 Found ${parts.length} speaker segments from [SPEAKER_TURN] markers`);
+    console.log(`📊 Found ${parts.length} parts after splitting by [SPEAKER_TURN]`);
     
-    parts.forEach((part, index) => {
+    let speakerIndex = 0;
+    
+    parts.forEach((part, _index) => {
       const cleanedText = part
         // Remove timestamp patterns
         .replace(/\[[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s*-->\s*[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\]/g, '')
-        // Remove extra whitespace
+        // Remove remaining brackets and artifacts
+        .replace(/\[.*?\]/g, '')
+        // Clean up whitespace
         .replace(/\s+/g, ' ')
         .trim();
       
-      if (cleanedText.length > 10) { // Only include substantial content
-        const speakerLabel = `Speaker ${String.fromCharCode(65 + index)}`; // A, B, C, etc.
+      // Only include parts with meaningful content (more than just a few words)
+      if (cleanedText.length > 15) {
+        const speakerLabel = `Speaker Turn ${speakerIndex + 1}`; // Turn 1, Turn 2, etc.
         
         segments.push({
           speaker: speakerLabel,
           text: cleanedText,
           startTime: 0, // tinydiarize doesn't provide precise timestamps per speaker
           endTime: 0,
-          confidence: 0.8 // Assume reasonable confidence for tinydiarize
+          confidence: 0.6 // Lower confidence since we're not doing clustering
         });
         
-        console.log(`✅ ${speakerLabel}: "${cleanedText.substring(0, 60)}${cleanedText.length > 60 ? '...' : ''}"`);
+        console.log(`✅ ${speakerLabel}: "${cleanedText.substring(0, 80)}${cleanedText.length > 80 ? '...' : ''}"`);
+        speakerIndex++;
+      } else if (cleanedText.length > 0) {
+        console.log(`⚠️ Skipping short segment (${cleanedText.length} chars): "${cleanedText}"`);
       }
     });
     
     console.log(`🎙️ Extracted ${segments.length} speaker segments from tinydiarize output`);
+    
+    // If we didn't get any segments, create a fallback
+    if (segments.length === 0 && text.trim().length > 0) {
+      console.log('⚠️ No segments found, creating fallback single speaker');
+      segments.push({
+        speaker: 'Speaker A',
+        text: text.replace(/\[SPEAKER_TURN\]/gi, '').replace(/\s+/g, ' ').trim(),
+        startTime: 0,
+        endTime: 0,
+        confidence: 0.5
+      });
+    }
+    
     return segments;
   }
 
@@ -642,7 +672,7 @@ export class TranscriptionManager {
       
       if (jsonData.segments && Array.isArray(jsonData.segments)) {
         // Whisper JSON format with segments
-        jsonData.segments.forEach((segment: any) => {
+        jsonData.segments.forEach((segment: WhisperSegment) => {
           segments.push({
             speaker: segment.speaker || defaultSpeaker,
             text: segment.text?.trim() || '',
@@ -936,7 +966,6 @@ export class TranscriptionManager {
   private async analyzeAudioFile(audioFilePath: string): Promise<{ hasAudio: boolean; info?: string }> {
     try {
       // Use FFmpeg to analyze the audio file if available
-      const { spawn } = require('child_process');
       
       return new Promise((resolve) => {
         // Try to use ffmpeg to get audio info
@@ -949,7 +978,7 @@ export class TranscriptionManager {
           stderr += data.toString();
         });
         
-        ffmpeg.on('close', (code: number | null) => {
+        ffmpeg.on('close', (_code: number | null) => {
           // Parse ffmpeg output for audio info
           const durationMatch = stderr.match(/Duration: (\d+):(\d+):(\d+\.\d+)/);
           const bitrateMatch = stderr.match(/bitrate: (\d+) kb\/s/);

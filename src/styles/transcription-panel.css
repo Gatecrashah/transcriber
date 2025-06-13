@@ -271,6 +271,195 @@
   background: #6e7681;
 }
 
+/* Chat Bubble Styles (Granola-inspired) */
+.chat-bubble-container {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.chat-bubble-container.user-speaker {
+  align-items: flex-end;
+}
+
+.chat-bubble-container.other-speaker {
+  align-items: flex-start;
+}
+
+.chat-bubble-controls {
+  display: none; /* Hidden by default, shown on hover */
+  position: absolute;
+  top: -8px;
+  right: 8px;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 8px;
+  padding: 4px 6px;
+  gap: 4px;
+  align-items: center;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.chat-bubble-container:hover .chat-bubble-controls {
+  display: flex;
+}
+
+.chat-bubble-container.selected .chat-bubble-controls {
+  display: flex;
+}
+
+.chat-bubble-checkbox {
+  width: 14px;
+  height: 14px;
+  border: 1px solid #6e7681;
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  margin: 0 4px 0 0;
+}
+
+.chat-bubble-checkbox:checked {
+  background: #ff8c42;
+  border-color: #ff8c42;
+}
+
+.chat-bubble-checkbox:checked::after {
+  content: '✓';
+  position: absolute;
+  top: -1px;
+  left: 1px;
+  color: #0d1117;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.chat-bubble-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.chat-bubble-actions .action-button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.chat-bubble-actions .action-button:hover {
+  background: rgba(255, 140, 66, 0.2);
+}
+
+.chat-bubble {
+  max-width: 280px;
+  padding: 12px 16px;
+  border-radius: 18px;
+  position: relative;
+  word-wrap: break-word;
+  line-height: 1.4;
+  font-size: 14px;
+  margin: 4px 8px;
+  transition: all 0.2s ease;
+}
+
+.chat-bubble-container.user-speaker .chat-bubble {
+  background: #4f9cf9;
+  color: #ffffff;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-bubble-container.other-speaker .chat-bubble {
+  background: #3d4549;
+  color: #e1e7ef;
+  border-bottom-left-radius: 4px;
+}
+
+.chat-bubble-container.selected .chat-bubble {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(255, 140, 66, 0.3);
+}
+
+.chat-bubble.inserted {
+  opacity: 0.7;
+  position: relative;
+}
+
+.chat-bubble .inserted-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #4ade80;
+  color: #0d1117;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+  border: 2px solid #2a1f30;
+}
+
+.chat-bubble-text {
+  margin: 0;
+}
+
+.chat-bubble-time {
+  font-size: 11px;
+  color: #7d8590;
+  margin: 4px 12px 0;
+  text-align: center;
+  opacity: 0.6;
+}
+
+.chat-bubble-container.user-speaker .chat-bubble-time {
+  text-align: right;
+}
+
+.chat-bubble-container.other-speaker .chat-bubble-time {
+  text-align: left;
+}
+
+/* Speaker identification for different speakers */
+.chat-bubble-container.other-speaker .chat-bubble {
+  background: var(--speaker-color, #3d4549);
+}
+
+/* Color variations for different speakers */
+.chat-bubble-container[data-speaker*="Turn 1"] .chat-bubble,
+.chat-bubble-container[data-speaker*="A"] .chat-bubble {
+  background: #5a9fd4; /* Blue */
+}
+
+.chat-bubble-container[data-speaker*="Turn 2"] .chat-bubble,
+.chat-bubble-container[data-speaker*="B"] .chat-bubble {
+  background: #6cc04a; /* Green */
+}
+
+.chat-bubble-container[data-speaker*="Turn 3"] .chat-bubble,
+.chat-bubble-container[data-speaker*="C"] .chat-bubble {
+  background: #ff8c42; /* Orange */
+}
+
+.chat-bubble-container[data-speaker*="Turn 4"] .chat-bubble,
+.chat-bubble-container[data-speaker*="D"] .chat-bubble {
+  background: #d566be; /* Purple */
+}
+
+.chat-bubble-container[data-speaker*="Turn 5"] .chat-bubble,
+.chat-bubble-container[data-speaker*="E"] .chat-bubble {
+  background: #f54e4e; /* Red */
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .transcription-panel {
@@ -296,5 +485,15 @@
   .action-button {
     padding: 4px 8px;
     font-size: 11px;
+  }
+  
+  .chat-bubble {
+    max-width: 240px;
+    font-size: 13px;
+    padding: 10px 14px;
+  }
+  
+  .chat-bubble-container {
+    margin-bottom: 12px;
   }
 }
