@@ -1,7 +1,9 @@
 import { app, BrowserWindow } from 'electron';
 import { setupAudioIPC, cleanupAudioIPC } from './main/ipc/audioIPC';
 import { TranscriptionIPC } from './main/ipc/transcriptionIPC';
+import { LLMIPCStub } from './main/ipc/llmIPCStub'; // Using stub until ESM import issues are resolved
 import { config } from 'dotenv';
+import squirrelStartup from 'electron-squirrel-startup';
 
 // Load environment variables from .env file
 config();
@@ -13,7 +15,7 @@ declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
-if (require('electron-squirrel-startup')) {
+if (squirrelStartup) {
   app.quit();
 }
 
@@ -50,7 +52,7 @@ const createWindow = (): void => {
       callback({ 
         video: mainWindow.webContents.mainFrame, 
         audio: 'loopback' 
-      } as unknown as Electron.Streams);
+      } as any);
     });
   } catch (error) {
     console.log('setDisplayMediaRequestHandler not available:', error);
@@ -67,9 +69,15 @@ const createWindow = (): void => {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', () => {
-  setupAudioIPC();
-  new TranscriptionIPC(); // Initialize transcription IPC handlers
-  createWindow();
+  try {
+    setupAudioIPC();
+    new TranscriptionIPC(); // Initialize transcription IPC handlers
+    LLMIPCStub.initialize(); // Initialize LLM stub handlers (LLM disabled temporarily)
+    
+    createWindow();
+  } catch (error) {
+    console.error('Error during app initialization:', error);
+  }
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common
@@ -77,6 +85,7 @@ app.on('ready', () => {
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   cleanupAudioIPC();
+  LLMIPCStub.cleanup(); // Cleanup LLM stub handlers
   if (process.platform !== 'darwin') {
     app.quit();
   }

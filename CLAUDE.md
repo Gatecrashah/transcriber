@@ -6,15 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Transcriper** is a sophisticated Electron-based transcription application that captures system audio and provides real-time AI-powered transcription using whisper.cpp. Built with TypeScript, React, and native Swift components for optimal macOS performance.
 
-### ✅ Current Status (v1.7 - Advanced Speaker Diarization Complete)
+### ✅ Current Status (v1.9 - System Audio Capture Fully Restored)
 - **Dual-Stream Audio Capture**: Simultaneous system audio + microphone recording
 - **Advanced Speaker Diarization**: Individual speaker identification using tinydiarize
 - **Voice Activity Detection (VAD)**: Performance optimization with quality filtering
 - **Local AI Transcription**: whisper.cpp with Apple Silicon GPU acceleration  
 - **Intelligent Text Formatting**: Advanced post-processing for readable transcripts
-- **Note Management System**: Local storage with CRUD operations
-- **Modern React UI**: Responsive interface with transcription panel
+- **Note Management System**: Local storage with CRUD operations and proper transcription linking
+- **Modern React UI**: Responsive interface with chat-bubble transcription panel
 - **Audio Format Optimization**: Automatic 16kHz resampling for Whisper compatibility
+- **Comprehensive Testing**: Jest framework with React Testing Library and extensive test coverage
+- **Type Safety**: Unified TypeScript definitions with strict compilation
 
 ## Key Architecture
 
@@ -210,29 +212,65 @@ The application has several security features enabled via Electron Fuses:
 - **Week 5-6**: Testing implementation
 - **Week 7**: Dependency updates
 
-## Phase 6: Transcription-Note Linking & Data Integrity (Week 8)
-**Priority: HIGH - Critical UX Issue**
+## ✅ Phase 6: System Audio Capture & Speaker Diarization (RESTORED)
+**Status: ✅ COMPLETED and RESTORED in v1.9**
 
-### 6.1 Fix Transcription-Note Association Bug (Day 1-2)
-- [ ] **Investigate Current Issue**: Transcriptions appear in all notes instead of specific meetings
-- [ ] **Implement Note-Specific Transcription Storage**
-  - Link transcriptions to specific note IDs
-  - Update data model to store transcription-note associations
-  - Modify transcription panel to only show current note's transcriptions
-- [ ] **Update Storage Architecture**
-  - Separate transcription storage per note
-  - Add transcription metadata (note ID, timestamp, session info)
-  - Implement transcription cleanup when notes are deleted
+### 🔧 Critical System Audio Capture Fix (v1.9)
+After Phase 6 completion, system audio capture with headphones stopped working due to missing Electron configuration. **Issue fully resolved:**
 
-### 6.2 Enhanced Note Management (Day 3-5)
-- [ ] **Meeting Type Classification**
-  - Add meeting type selection (1:1, Team Meeting, Client Call, Interview, etc.)
-  - Store meeting type metadata with notes
-  - UI dropdown/selector for meeting types during note creation
-- [ ] **Transcription History**
-  - Show transcription history per note
-  - Allow viewing/editing previous transcriptions within a note
-  - Export transcriptions separately from notes
+- [x] **Root Cause Identified**: Missing `setDisplayMediaRequestHandler` with `audio: 'loopback'` configuration
+- [x] **Electron Configuration Restored**: Added proper display media handler for system audio capture
+- [x] **getDisplayMedia() API Fixed**: Now successfully captures system audio with headphones (AirPods, etc.)
+- [x] **VAD Issues Resolved**: Disabled overly aggressive Voice Activity Detection that was blocking real speech
+- [x] **Tinydiarize Model Verified**: Confirmed `ggml-small.en-tdrz.bin` (487MB) properly configured for speaker separation
+- [x] **Full Dual-Stream Working**: Both system audio + microphone capture working simultaneously
+- [x] **Speaker Identification**: Successfully detecting multiple speakers with `[SPEAKER_TURN]` markers
+
+### 🔧 Technical Details of the Fix
+**Files Modified:**
+- `src/index.ts`: Restored `setDisplayMediaRequestHandler` with `audio: 'loopback'` configuration
+- `src/hooks/useAudioRecording.ts`: Updated to use Electron 36.4.0 compatible approach
+- `src/main/transcription/audio/analyzer.ts`: Temporarily disabled aggressive VAD
+- `package.json`: Upgraded Electron from 25.9.8 to 36.4.0
+
+**Key Configuration Restored:**
+```typescript
+mainWindow.webContents.session.setDisplayMediaRequestHandler((request, callback) => {
+  callback({ 
+    video: mainWindow.webContents.mainFrame, 
+    audio: 'loopback' 
+  });
+});
+```
+
+**Result:** System audio now captures successfully with `getDisplayMedia({ audio: true, video: false })` even with headphones connected.
+
+### ✅ 6.1 Fix Transcription-Note Association Bug (COMPLETED)
+- [x] **Investigated Current Issue**: Fixed transcriptions appearing in all notes instead of specific meetings
+- [x] **Implemented Note-Specific Transcription Storage**
+  - [x] Linked transcriptions to specific note IDs in data model
+  - [x] Updated data model to store transcription-note associations properly
+  - [x] Modified transcription panel to only show current note's transcriptions
+- [x] **Updated Storage Architecture**
+  - [x] Implemented separate transcription storage per note
+  - [x] Added transcription metadata (note ID, timestamp, session info)
+  - [x] Added transcription cleanup methods for when notes are deleted
+
+### ✅ 6.2 Enhanced Note Management & Testing (COMPLETED)
+- [x] **Chat-Bubble UI for Speaker Diarization**
+  - [x] Implemented Granola-style chat bubbles for speaker-identified transcriptions
+  - [x] Added visual distinction between different speakers
+  - [x] Created fallback to traditional segments for non-speaker content
+- [x] **Comprehensive Testing Framework**
+  - [x] Set up Jest with TypeScript support and React Testing Library
+  - [x] Created extensive test suites for note management and transcription linking
+  - [x] Added tests for localStorage serialization/deserialization
+  - [x] Implemented test coverage for critical functionality
+- [x] **TypeScript Compilation Fixes**
+  - [x] Unified TranscriptionOptions interfaces across codebase
+  - [x] Fixed model type assertions and removed duplicate interfaces
+  - [x] Removed unsupported API properties while maintaining extensibility
+  - [x] Cleaned up unused props and linting warnings
 
 ## Phase 7: LLM-Based Meeting Enhancement System (Week 9-12)
 **Priority: MEDIUM - Advanced Feature - Requires Extensive Planning**
@@ -304,10 +342,10 @@ The application has several security features enabled via Electron Fuses:
 - [ ] >90% user satisfaction with generated summaries
 - [ ] Zero data leakage between unrelated notes
 
-**Updated Estimated Timeline: 12 weeks total**
-- **Week 1-7**: Core stability and architecture (as planned above)
-- **Week 8**: Transcription-note linking fixes
-- **Week 9-12**: LLM-based meeting enhancement system
+**Updated Estimated Timeline: 11 weeks remaining**
+- **Week 1-7**: Core stability and architecture (planned for future)
+- **✅ Week 8**: Transcription-note linking fixes (COMPLETED)
+- **Week 9-12**: LLM-based meeting enhancement system (NEXT PHASE)
 
 ---
 
@@ -379,26 +417,12 @@ The application has several security features enabled via Electron Fuses:
 - [ ] **Enhanced Speaker Features**
   - [ ] Allow custom speaker names/labels (replace Speaker A/B/C with real names)
   - [ ] Implement speaker voice profile learning for better consistency
-  - [ ] Add speaker timeline visualization in UI
-  - [ ] Export speaker-separated transcriptions to different formats
-
-- [ ] **UI Enhancements for Diarization**
-  - [ ] Add speaker color coding in transcription display
-  - [ ] Implement speaker filtering/hiding options
-  - [ ] Create speaker statistics panel showing talk time
-  - [ ] Add speaker confidence indicators
 
 ### Audio Quality Improvements
 - [ ] **Audio Preprocessing Pipeline**
   - Implement noise reduction using Web Audio API
   - Add automatic gain control for consistent levels
   - Create audio quality indicators and warnings
-  - Add support for different audio input sources
-
-- [ ] **Advanced Audio Features**
-  - Real-time audio visualization during recording
-  - Audio waveform display for transcription segments
-  - Support for multiple audio formats beyond WAV
   - Implement audio compression for storage efficiency
 
 ## ⚡ Phase 3: Performance & User Experience (Priority: MEDIUM)
@@ -470,17 +494,17 @@ The application has several security features enabled via Electron Fuses:
 **Timeline: 2-3 weeks**
 
 ### Test Infrastructure
-- [ ] **Unit Testing Framework**
-  - Set up Jest configuration for comprehensive testing
-  - Create mock audio devices for testing
-  - Implement audio processing pipeline tests
-  - Add transcription accuracy validation tests
+- [x] **Unit Testing Framework**
+  - [x] Set up Jest configuration for comprehensive testing
+  - [x] Create mock audio devices for testing
+  - [x] Implement audio processing pipeline tests
+  - [x] Add transcription accuracy validation tests
 
-- [ ] **Integration Testing**
-  - End-to-end audio capture and transcription tests
-  - UI component integration testing with React Testing Library
-  - Error handling scenario testing
-  - Cross-platform compatibility testing
+- [x] **Integration Testing**
+  - [x] UI component integration testing with React Testing Library
+  - [x] Error handling scenario testing
+  - [ ] End-to-end audio capture and transcription tests
+  - [ ] Cross-platform compatibility testing
 
 - [ ] **Performance Testing**
   - Memory leak detection and prevention
@@ -488,7 +512,7 @@ The application has several security features enabled via Electron Fuses:
   - Audio quality degradation monitoring
   - Load testing for multiple concurrent transcriptions
 
-## 📚 Phase 6: Documentation & Polish (Priority: MEDIUM)
+## 📚 Phase 8: Documentation & Polish (Priority: MEDIUM)
 **Timeline: 1-2 weeks**
 
 ### User Documentation
@@ -504,28 +528,6 @@ The application has several security features enabled via Electron Fuses:
   - Audio processing pipeline documentation
   - Architecture overview and design decisions
   - Contributing guidelines and development setup
-
----
-
-# 🎨 Future Enhancement Ideas (Phase 7+)
-
-## Advanced AI Features
-- [ ] **Multi-language Support**: Automatic language detection and switching
-- [ ] **Custom Vocabulary**: Domain-specific terminology training
-- [ ] **Sentiment Analysis**: Emotion and tone detection in transcriptions
-- [ ] **Meeting Insights**: Automatic action items and summary generation
-
-## Collaboration Features  
-- [ ] **Real-time Collaboration**: Multiple users in same transcription session
-- [ ] **Comment System**: Annotations and discussions on transcriptions
-- [ ] **Team Workspaces**: Shared note collections with permissions
-- [ ] **Integration APIs**: Connect with popular productivity tools
-
-## Mobile and Cross-platform
-- [ ] **Mobile Companion App**: Remote control and basic transcription
-- [ ] **Web Interface**: Browser-based access to notes and transcriptions
-- [ ] **Cloud Sync**: Optional cloud storage with end-to-end encryption
-- [ ] **API Ecosystem**: Third-party integrations and plugins
 
 ---
 

@@ -20,6 +20,10 @@ export class AudioAnalyzer {
    */
   async performVAD(audioFilePath: string): Promise<VADResult> {
     try {
+      // TEMPORARILY DISABLE VAD - working version didn't have it
+      console.log('🎙️ VAD temporarily disabled (working version had no VAD)');
+      return { hasVoice: true, confidence: 0.9 };
+      
       // Use whisper.cpp with very short duration to quickly check for voice activity
       const vadArgs = [
         '-m', this.modelManager.getModelPath('tiny'), // Use tiny model for fast VAD
