@@ -273,7 +273,22 @@ mainWindow.webContents.session.setDisplayMediaRequestHandler((request, callback)
   - [x] Cleaned up unused props and linting warnings
 
 ## Phase 7: LLM-Based Meeting Enhancement System (Week 9-12)
-**Priority: MEDIUM - Advanced Feature - Requires Extensive Planning**
+**Priority: MEDIUM - Advanced Feature - PARTIALLY STARTED (LLM files present but blocked by dependency issues)**
+
+### 🚧 Current Status
+Phase 7 work was started but encountered version compatibility issues with llama.cpp dependencies. LLM-related files are present in the codebase but not yet functional. This phase should be resumed after core stability is achieved.
+
+**LLM Files Present (Uncommitted):**
+- `src/hooks/useLLM.ts` - LLM integration hook
+- `src/hooks/useNoteEnhancement.ts` - Note enhancement logic
+- `src/main/ipc/llmIPC.ts` - LLM IPC handlers  
+- `src/main/ipc/llmIPCStub.ts` - Stub handlers (currently active)
+- `src/main/llm/` - LLM core functionality
+- `src/components/AIEnhancementToggle.tsx` - UI components
+- `src/components/EnhancedNoteDisplay.tsx` - Enhanced note display
+- `src/types/llm.ts` - LLM type definitions
+
+These files represent partial Phase 7 implementation and should be completed once dependency issues are resolved.
 
 ### 7.1 LLM Integration Architecture (Week 9)
 - [ ] **Qwen 2-7B Q4_K_M Model Integration**
@@ -343,9 +358,10 @@ mainWindow.webContents.session.setDisplayMediaRequestHandler((request, callback)
 - [ ] Zero data leakage between unrelated notes
 
 **Updated Estimated Timeline: 11 weeks remaining**
-- **Week 1-7**: Core stability and architecture (planned for future)
+- **Week 1-7**: Core stability and architecture (planned for future)  
 - **✅ Week 8**: Transcription-note linking fixes (COMPLETED)
-- **Week 9-12**: LLM-based meeting enhancement system (NEXT PHASE)
+- **✅ Week 8.5**: System audio capture restoration (COMPLETED)
+- **Week 9-12**: LLM-based meeting enhancement system (BLOCKED - resume after dependency resolution)
 
 ---
 
