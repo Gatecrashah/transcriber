@@ -27,7 +27,15 @@ export class TranscriptionIPC {
     ipcMain.handle('transcription:transcribe-file', async (event, filePath: string, options: Record<string, unknown> = {}) => {
       try {
         console.log('Transcribing file:', filePath);
-        return await this.transcriptionManager.transcribeFile(filePath, options);
+        
+        // Enable pyannote for testing if diarization is enabled
+        const enhancedOptions = {
+          ...options,
+          usePyannote: options.enableDiarization === true, // Enable pyannote when diarization is requested
+        };
+        
+        console.log('🎙️ Transcription options:', enhancedOptions);
+        return await this.transcriptionManager.transcribeFile(filePath, enhancedOptions);
       } catch (error) {
         console.error('Error transcribing file:', error);
         return {
@@ -47,10 +55,18 @@ export class TranscriptionIPC {
     ) => {
       try {
         console.log('Transcribing dual streams:', { systemAudioPath, microphoneAudioPath });
+        
+        // Enable pyannote for testing - this gives the best speaker diarization
+        const enhancedOptions = {
+          ...options,
+          usePyannote: true, // Always enable pyannote for dual streams (falls back to tinydiarize if unavailable)
+        };
+        
+        console.log('🎙️ Dual stream options:', enhancedOptions);
         return await this.transcriptionManager.transcribeDualStreams(
           systemAudioPath,
           microphoneAudioPath,
-          options
+          enhancedOptions
         );
       } catch (error) {
         console.error('Error transcribing dual streams:', error);
