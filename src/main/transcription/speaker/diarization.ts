@@ -106,11 +106,76 @@ export class SpeakerDiarization {
         return combinedSegments;
       }
     } catch {
-      console.warn('⚠️ Failed to parse transcription JSON, using pyannote segments only');
+      console.warn('⚠️ Failed to parse transcription JSON, trying plain text parsing');
+      
+      // Try to parse plain text format with timestamps
+      const textSegments = this.parseTimestampedText(transcriptionText);
+      if (textSegments.length > 0) {
+        console.log(`📝 Parsed ${textSegments.length} text segments from plain format`);
+        
+        // Combine with pyannote segments
+        const combinedSegments: SpeakerSegment[] = [];
+        
+        textSegments.forEach((textSegment) => {
+          const matchingSpeaker = this.findBestSpeakerMatch(
+            textSegment.startTime,
+            textSegment.endTime,
+            pyannoteSegments
+          );
+          
+          combinedSegments.push({
+            speaker: matchingSpeaker?.speaker || 'Unknown Speaker',
+            text: textSegment.text,
+            startTime: textSegment.startTime,
+            endTime: textSegment.endTime,
+            confidence: matchingSpeaker?.confidence || 0.5
+          });
+        });
+        
+        console.log(`✅ Successfully combined ${textSegments.length} text segments with pyannote speakers`);
+        return combinedSegments;
+      }
     }
     
-    // Fallback: return pyannote segments (without text)
+    // Final fallback: return pyannote segments (without text)
+    console.warn('⚠️ Could not parse transcription text, returning pyannote segments without text');
     return pyannoteSegments;
+  }
+
+  /**
+   * Parse plain text format with timestamps like [00:00:00.000 --> 00:00:16.200] text
+   */
+  private parseTimestampedText(text: string): Array<{startTime: number, endTime: number, text: string}> {
+    const segments: Array<{startTime: number, endTime: number, text: string}> = [];
+    
+    // Regex to match timestamp format: [00:00:00.000 --> 00:00:16.200]
+    const timestampRegex = /\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*([\s\S]+?)(?=\[|$)/g;
+    
+    let match;
+    while ((match = timestampRegex.exec(text)) !== null) {
+      const [, startH, startM, startS, startMs, endH, endM, endS, endMs, content] = match;
+      
+      // Convert to seconds
+      const startTime = parseInt(startH) * 3600 + parseInt(startM) * 60 + parseInt(startS) + parseInt(startMs) / 1000;
+      const endTime = parseInt(endH) * 3600 + parseInt(endM) * 60 + parseInt(endS) + parseInt(endMs) / 1000;
+      
+      const cleanText = content.trim().replace(/\n+/g, ' ');
+      
+      if (cleanText.length > 0) {
+        segments.push({
+          startTime,
+          endTime,
+          text: cleanText
+        });
+      }
+    }
+    
+    console.log(`📝 Parsed ${segments.length} timestamped segments from plain text`);
+    segments.forEach((seg, i) => {
+      console.log(`   ${i}: ${seg.startTime.toFixed(1)}s-${seg.endTime.toFixed(1)}s: "${seg.text.substring(0, 50)}..."`);
+    });
+    
+    return segments;
   }
 
   /**

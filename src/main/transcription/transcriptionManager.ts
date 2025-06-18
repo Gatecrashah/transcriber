@@ -196,7 +196,9 @@ export class TranscriptionManager {
       }
 
       // Add output format - prefer JSON for diarization to get speaker timestamps
-      if ((options.enableDiarization && this.hasTinydiarizeModel()) || options.outputFormat === 'json') {
+      if ((options.enableDiarization && this.hasTinydiarizeModel()) || 
+          (options.enableDiarization && options.usePyannote) || 
+          options.outputFormat === 'json') {
         args.push('--output-json');
         console.log('📄 JSON output format enabled for diarization');
       } else if (options.outputFormat === 'srt') {
