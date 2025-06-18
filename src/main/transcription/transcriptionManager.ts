@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { spawn } from 'child_process';
 import type { WhisperSegment } from '../../types/transcription';
+import { SpeakerDiarization } from './speaker/diarization';
 
 export interface TranscriptionResult {
   text: string;
@@ -109,13 +110,13 @@ export class TranscriptionManager {
       }
       
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
 
   /**
-   * Transcribe an audio file using whisper.cpp
+   * Transcribe an audio file using whisper.cpp with optional pyannote diarization
    * @param audioFilePath Path to the audio file to transcribe
    * @param options Additional options for transcription
    */
@@ -127,6 +128,7 @@ export class TranscriptionManager {
       model?: string;
       outputFormat?: 'txt' | 'json' | 'srt' | 'vtt';
       enableDiarization?: boolean;
+      usePyannote?: boolean;
       speakerLabel?: string;
     } = {}
   ): Promise<TranscriptionResult> {
@@ -224,10 +226,38 @@ export class TranscriptionManager {
           console.log('⚠️  Empty transcription result - this might indicate an audio format issue');
         }
         
+        // Enhanced speaker diarization with pyannote if requested
+        let speakers: SpeakerSegment[] = [];
+        if (options.enableDiarization && options.usePyannote) {
+          try {
+            console.log('🎙️ Attempting pyannote speaker diarization...');
+            const diarization = new SpeakerDiarization();
+            const pyannoteSegments = await diarization.diarizeWithPyannote(audioFilePath);
+            
+            if (pyannoteSegments.length > 0) {
+              console.log(`✅ Pyannote found ${pyannoteSegments.length} speaker segments`);
+              speakers = diarization.combineWithTranscription(pyannoteSegments, transcribedText);
+            } else {
+              console.log('⚠️ Pyannote returned no segments, falling back to tinydiarize parsing');
+              speakers = diarization.parseTranscriptionForMultipleSpeakers(transcribedText);
+            }
+          } catch (error) {
+            console.error('❌ Pyannote diarization failed:', error);
+            console.log('🔄 Falling back to tinydiarize parsing...');
+            const diarization = new SpeakerDiarization();
+            speakers = diarization.parseTranscriptionForMultipleSpeakers(transcribedText);
+          }
+        } else if (options.enableDiarization) {
+          // Use existing tinydiarize logic
+          const diarization = new SpeakerDiarization();
+          speakers = diarization.parseTranscriptionForMultipleSpeakers(transcribedText);
+        }
+        
         return {
           text: transcribedText,
           success: true,
-          duration: this.extractDuration(result.stdout)
+          duration: this.extractDuration(result.stdout),
+          speakers: speakers.length > 0 ? speakers : undefined
         };
       } else {
         console.error('❌ Whisper failed:', result.stderr);
@@ -262,6 +292,7 @@ export class TranscriptionManager {
       model?: string;
       systemSpeakerName?: string;
       microphoneSpeakerName?: string;
+      usePyannote?: boolean;
     } = {}
   ): Promise<TranscriptionResult> {
     try {
@@ -302,7 +333,8 @@ export class TranscriptionManager {
           
           const systemResult = await this.transcribeFile(systemAudioPath, {
             ...options,
-            enableDiarization: true, // Enable tinydiarize for multi-speaker detection
+            enableDiarization: true, // Enable speaker diarization
+            usePyannote: options.usePyannote, // Use pyannote if requested
             outputFormat: 'txt', // Use text output for tinydiarize
             speakerLabel: systemSpeaker
           });
@@ -326,8 +358,7 @@ export class TranscriptionManager {
             
             // Parse tinydiarize output
             const systemSegments = this.parseTranscriptionForMultipleSpeakers(
-              systemResult.text, 
-              'system'
+              systemResult.text
             );
             
             console.log('📊 DIARIZATION METHOD USED: TINYDIARIZE');
@@ -374,8 +405,7 @@ export class TranscriptionManager {
               console.log('📝 USING FALLBACK RESULT - this creates single speaker output');
               const fallbackSegments = this.parseTranscriptionForSpeakers(
                 fallbackResult.text, 
-                systemSpeaker,
-                'system'
+                systemSpeaker
               );
               results.push(...fallbackSegments);
               combinedText += `**${systemSpeaker}:**\n${fallbackResult.text.trim()}\n\n`;
@@ -421,8 +451,7 @@ export class TranscriptionManager {
               } else {
                 const micSegments = this.parseTranscriptionForSpeakers(
                   cleanedText,
-                  microphoneSpeaker,
-                  'microphone'
+                  microphoneSpeaker
                 );
                 results.push(...micSegments);
                 combinedText += `**${microphoneSpeaker}:**\n${cleanedText}\n\n`;
@@ -478,8 +507,7 @@ export class TranscriptionManager {
    * Parse transcription output for multiple speakers (advanced diarization)
    */
   private parseTranscriptionForMultipleSpeakers(
-    transcriptionText: string,
-    _streamType: 'system' | 'microphone'
+    transcriptionText: string
   ): SpeakerSegment[] {
     const segments: SpeakerSegment[] = [];
     
@@ -506,8 +534,8 @@ export class TranscriptionManager {
         console.log(`Found ${jsonData.segments.length} segments for multi-speaker analysis`);
         
         // Debug: Log first few segments to understand structure
-        jsonData.segments.slice(0, 3).forEach((segment: WhisperSegment, _index: number) => {
-          console.log(`🔍 Segment ${_index}:`, {
+        jsonData.segments.slice(0, 3).forEach((segment: WhisperSegment, index: number) => {
+          console.log(`🔍 Segment ${index}:`, {
             speaker: segment.speaker,
             speaker_id: segment.speaker_id,
             text: segment.text?.substring(0, 50),
@@ -589,7 +617,7 @@ export class TranscriptionManager {
     
     let speakerIndex = 0;
     
-    parts.forEach((part, _index) => {
+    parts.forEach((part) => {
       const cleanedText = part
         // Remove timestamp patterns
         .replace(/\[[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s*-->\s*[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\]/g, '')
@@ -661,8 +689,7 @@ export class TranscriptionManager {
    */
   private parseTranscriptionForSpeakers(
     transcriptionText: string,
-    defaultSpeaker: string,
-    _streamType: 'system' | 'microphone'
+    defaultSpeaker: string
   ): SpeakerSegment[] {
     const segments: SpeakerSegment[] = [];
     
@@ -978,7 +1005,7 @@ export class TranscriptionManager {
           stderr += data.toString();
         });
         
-        ffmpeg.on('close', (_code: number | null) => {
+        ffmpeg.on('close', () => {
           // Parse ffmpeg output for audio info
           const durationMatch = stderr.match(/Duration: (\d+):(\d+):(\d+\.\d+)/);
           const bitrateMatch = stderr.match(/bitrate: (\d+) kb\/s/);
@@ -1020,7 +1047,7 @@ export class TranscriptionManager {
           });
         }, 5000);
       });
-    } catch (error) {
+    } catch {
       return {
         hasAudio: true,
         info: 'Analysis error, assuming audio present'

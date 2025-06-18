@@ -3,14 +3,152 @@
  */
 
 import type { SpeakerSegment, WhisperSegment } from '../../../types/transcription';
+import { PyannoteIntegration, type PyannoteResult, type PyannoteSegment } from './pyannote-integration';
 
 export class SpeakerDiarization {
+  private pyannoteIntegration: PyannoteIntegration;
+
+  constructor() {
+    this.pyannoteIntegration = new PyannoteIntegration();
+  }
+
+  /**
+   * Enhanced diarization using pyannote.audio for speaker clustering
+   */
+  async diarizeWithPyannote(audioPath: string): Promise<SpeakerSegment[]> {
+    console.log('🎙️ Starting pyannote.audio speaker diarization...');
+    
+    // Check if pyannote is available and configured
+    const dependencyCheck = await this.pyannoteIntegration.checkDependencies();
+    if (!dependencyCheck.available) {
+      console.warn('⚠️ Pyannote not available:', dependencyCheck.message);
+      return [];
+    }
+
+    if (!this.pyannoteIntegration.isConfigured()) {
+      console.warn('⚠️ Pyannote not configured - missing HUGGINGFACE_TOKEN');
+      return [];
+    }
+
+    try {
+      const result: PyannoteResult = await this.pyannoteIntegration.diarizeAudio(audioPath);
+      
+      if (!result.success) {
+        console.error('❌ Pyannote diarization failed:', result.error);
+        return [];
+      }
+
+      if (!result.speakers || result.speakers.length === 0) {
+        console.warn('⚠️ No speakers detected by pyannote');
+        return [];
+      }
+
+      console.log(`✅ Pyannote identified ${result.total_speakers} speakers in ${result.total_segments} segments`);
+      
+      // Convert pyannote segments to our format
+      const speakerSegments: SpeakerSegment[] = result.speakers.map((segment: PyannoteSegment) => ({
+        speaker: segment.speaker,
+        text: '', // Text will be filled by transcription
+        startTime: segment.start_time,
+        endTime: segment.end_time,
+        confidence: segment.confidence
+      }));
+
+      return speakerSegments;
+    } catch (error) {
+      console.error('❌ Error during pyannote diarization:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Combine pyannote speaker segments with transcription text
+   */
+  combineWithTranscription(
+    pyannoteSegments: SpeakerSegment[],
+    transcriptionText: string
+  ): SpeakerSegment[] {
+    if (pyannoteSegments.length === 0) {
+      // Fallback to existing logic
+      return this.parseTranscriptionForMultipleSpeakers(transcriptionText);
+    }
+
+    console.log(`🔗 Combining ${pyannoteSegments.length} pyannote segments with transcription`);
+    
+    try {
+      const jsonData = JSON.parse(transcriptionText);
+      
+      if (jsonData.segments && Array.isArray(jsonData.segments)) {
+        // Map transcription segments to speaker segments based on timing
+        const combinedSegments: SpeakerSegment[] = [];
+        
+        jsonData.segments.forEach((transcriptSegment: WhisperSegment) => {
+          const segmentStart = transcriptSegment.start || 0;
+          const segmentEnd = transcriptSegment.end || 0;
+          
+          // Find the best matching pyannote segment based on timing overlap
+          const matchingSpeaker = this.findBestSpeakerMatch(
+            segmentStart,
+            segmentEnd,
+            pyannoteSegments
+          );
+          
+          combinedSegments.push({
+            speaker: matchingSpeaker?.speaker || 'Unknown Speaker',
+            text: transcriptSegment.text?.trim() || '',
+            startTime: segmentStart,
+            endTime: segmentEnd,
+            confidence: matchingSpeaker?.confidence || 0.5
+          });
+        });
+        
+        console.log(`✅ Successfully combined segments: ${combinedSegments.length} final segments`);
+        return combinedSegments;
+      }
+    } catch {
+      console.warn('⚠️ Failed to parse transcription JSON, using pyannote segments only');
+    }
+    
+    // Fallback: return pyannote segments (without text)
+    return pyannoteSegments;
+  }
+
+  /**
+   * Find the best speaker match based on timing overlap
+   */
+  private findBestSpeakerMatch(
+    startTime: number,
+    endTime: number,
+    speakerSegments: SpeakerSegment[]
+  ): SpeakerSegment | null {
+    let bestMatch: SpeakerSegment | null = null;
+    let bestOverlap = 0;
+    
+    const segmentDuration = endTime - startTime;
+    
+    speakerSegments.forEach(speaker => {
+      // Calculate overlap between transcription segment and speaker segment
+      const overlapStart = Math.max(startTime, speaker.startTime);
+      const overlapEnd = Math.min(endTime, speaker.endTime);
+      const overlap = Math.max(0, overlapEnd - overlapStart);
+      
+      // Calculate overlap ratio relative to transcription segment duration
+      const overlapRatio = segmentDuration > 0 ? overlap / segmentDuration : 0;
+      
+      if (overlapRatio > bestOverlap) {
+        bestOverlap = overlapRatio;
+        bestMatch = speaker;
+      }
+    });
+    
+    return bestMatch;
+  }
+
   /**
    * Parse transcription output for multiple speakers (advanced diarization)
    */
   parseTranscriptionForMultipleSpeakers(
-    transcriptionText: string,
-    _streamType: 'system' | 'microphone'
+    transcriptionText: string
   ): SpeakerSegment[] {
     const segments: SpeakerSegment[] = [];
     
@@ -37,8 +175,8 @@ export class SpeakerDiarization {
         console.log(`Found ${jsonData.segments.length} segments for multi-speaker analysis`);
         
         // Debug: Log first few segments to understand structure
-        jsonData.segments.slice(0, 3).forEach((segment: WhisperSegment, _index: number) => {
-          console.log(`🔍 Segment ${_index}:`, {
+        jsonData.segments.slice(0, 3).forEach((segment: WhisperSegment, index: number) => {
+          console.log(`🔍 Segment ${index}:`, {
             speaker: segment.speaker,
             speaker_id: segment.speaker_id,
             text: segment.text?.substring(0, 50),
@@ -111,6 +249,25 @@ export class SpeakerDiarization {
     console.log('🎙️ Parsing tinydiarize [SPEAKER_TURN] markers...');
     console.log('📋 Raw input text:', text.substring(0, 300) + '...');
     
+    // Check if text contains [SPEAKER_TURN] markers
+    const hasSpeakerTurns = /\[SPEAKER_TURN\]/gi.test(text);
+    
+    if (!hasSpeakerTurns) {
+      // No speaker turns found, create a single segment with default speaker
+      const cleanedText = text.trim();
+      if (cleanedText.length > 0) {
+        console.log('📋 No [SPEAKER_TURN] markers found, creating single Speaker A segment');
+        segments.push({
+          speaker: 'Speaker A',
+          text: cleanedText,
+          startTime: 0,
+          endTime: 0,
+          confidence: 0.5
+        });
+      }
+      return segments;
+    }
+    
     // Split text by [SPEAKER_TURN] markers
     const parts = text.split(/\[SPEAKER_TURN\]/gi); // Case-insensitive split
     
@@ -118,7 +275,7 @@ export class SpeakerDiarization {
     
     let speakerIndex = 0;
     
-    parts.forEach((part, _index) => {
+    parts.forEach((part) => {
       const cleanedText = part
         // Remove timestamp patterns
         .replace(/\[[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s*-->\s*[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\]/g, '')
@@ -128,8 +285,8 @@ export class SpeakerDiarization {
         .replace(/\s+/g, ' ')
         .trim();
       
-      // Only include parts with meaningful content (more than just a few words)
-      if (cleanedText.length > 15) {
+      // Only include parts with meaningful content (more than just a few characters)
+      if (cleanedText.length > 3) {
         const speakerLabel = `Speaker Turn ${speakerIndex + 1}`; // Turn 1, Turn 2, etc.
         
         segments.push({
@@ -148,18 +305,6 @@ export class SpeakerDiarization {
     });
     
     console.log(`🎙️ Extracted ${segments.length} speaker segments from tinydiarize output`);
-    
-    // If we didn't get any segments, create a fallback
-    if (segments.length === 0 && text.trim().length > 0) {
-      console.log('⚠️ No segments found, creating fallback single speaker');
-      segments.push({
-        speaker: 'Speaker A',
-        text: text.replace(/\[SPEAKER_TURN\]/gi, '').replace(/\s+/g, ' ').trim(),
-        startTime: 0,
-        endTime: 0,
-        confidence: 0.5
-      });
-    }
     
     return segments;
   }
@@ -190,8 +335,7 @@ export class SpeakerDiarization {
    */
   parseTranscriptionForSpeakers(
     transcriptionText: string,
-    defaultSpeaker: string,
-    _streamType: 'system' | 'microphone'
+    defaultSpeaker: string
   ): SpeakerSegment[] {
     const segments: SpeakerSegment[] = [];
     
