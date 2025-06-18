@@ -32,8 +32,8 @@ export class PyannoteIntegration {
   private device: string;
 
   constructor() {
-    // Path to the Python script
-    this.scriptPath = path.join(__dirname, 'pyannote-diarization.py');
+    // Path to the Python script - handle both dev and bundled environments
+    this.scriptPath = this.findScriptPath();
     
     // Get Python path (try common locations)
     this.pythonPath = this.findPythonPath();
@@ -46,6 +46,31 @@ export class PyannoteIntegration {
     
     // Device preference
     this.device = process.env.PYANNOTE_DEVICE || 'cpu';
+  }
+
+  private findScriptPath(): string {
+    // Try multiple possible locations for the Python script
+    const possiblePaths = [
+      // In the same directory (bundled)
+      path.join(__dirname, 'pyannote-diarization.py'),
+      // Relative to current working directory (development)
+      path.join(process.cwd(), 'src', 'main', 'transcription', 'speaker', 'pyannote-diarization.py'),
+      // Relative to this file's location (development)
+      path.join(__dirname, '..', '..', '..', '..', 'src', 'main', 'transcription', 'speaker', 'pyannote-diarization.py'),
+      // From project root
+      path.join(process.cwd(), 'pyannote-diarization.py')
+    ];
+
+    for (const scriptPath of possiblePaths) {
+      if (fs.existsSync(scriptPath)) {
+        console.log(`✅ Found pyannote script at: ${scriptPath}`);
+        return scriptPath;
+      }
+    }
+
+    // If none found, return the first option and let it fail gracefully
+    console.warn('⚠️ Pyannote script not found in any expected location');
+    return possiblePaths[0];
   }
 
   private findPythonPath(): string {
