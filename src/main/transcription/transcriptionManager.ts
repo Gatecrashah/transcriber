@@ -358,12 +358,21 @@ export class TranscriptionManager {
             console.log('📋 System result text contains [SPEAKER_TURN]:', systemResult.text.includes('[SPEAKER_TURN]'));
             console.log('📋 System result text length:', systemResult.text.length);
             
-            // Parse tinydiarize output
-            const systemSegments = this.parseTranscriptionForMultipleSpeakers(
-              systemResult.text
-            );
+            // Use pyannote results if available, otherwise parse tinydiarize output
+            let systemSegments: SpeakerSegment[];
             
-            console.log('📊 DIARIZATION METHOD USED: TINYDIARIZE');
+            if (systemResult.speakers && systemResult.speakers.length > 0) {
+              // Use existing pyannote results
+              systemSegments = systemResult.speakers;
+              console.log('📊 DIARIZATION METHOD USED: PYANNOTE');
+              console.log(`🎙️ Using ${systemSegments.length} pyannote speaker segments`);
+            } else {
+              // Fallback to tinydiarize parsing
+              systemSegments = this.parseTranscriptionForMultipleSpeakers(
+                systemResult.text
+              );
+              console.log('📊 DIARIZATION METHOD USED: TINYDIARIZE');
+            }
             
             console.log('🎙️ Parsed system segments:', systemSegments.length);
             systemSegments.forEach((seg, i) => {
