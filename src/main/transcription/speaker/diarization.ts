@@ -143,6 +143,43 @@ export class SpeakerDiarization {
   }
 
   /**
+   * Split text by >> speaker markers and distribute timing proportionally
+   */
+  private splitBySpeakerMarkers(text: string, startTime: number, endTime: number): Array<{startTime: number, endTime: number, text: string}> {
+    // Split on >> markers (but keep the >> for the first part if it starts with >>)
+    const parts = text.split(/\s*>>\s*/).filter(part => part.trim().length > 0);
+    
+    if (parts.length <= 1) {
+      // No >> markers found, return as single segment
+      return [{
+        startTime,
+        endTime,
+        text: text.replace(/^>>\s*/, '').trim() // Remove leading >> if present
+      }];
+    }
+    
+    const segments: Array<{startTime: number, endTime: number, text: string}> = [];
+    const totalDuration = endTime - startTime;
+    const segmentDuration = totalDuration / parts.length;
+    
+    parts.forEach((part, index) => {
+      const segmentStart = startTime + (index * segmentDuration);
+      const segmentEnd = Math.min(startTime + ((index + 1) * segmentDuration), endTime);
+      
+      const cleanText = part.trim();
+      if (cleanText.length > 0) {
+        segments.push({
+          startTime: segmentStart,
+          endTime: segmentEnd,
+          text: cleanText
+        });
+      }
+    });
+    
+    return segments;
+  }
+
+  /**
    * Parse plain text format with timestamps like [00:00:00.000 --> 00:00:16.200] text
    */
   private parseTimestampedText(text: string): Array<{startTime: number, endTime: number, text: string}> {
@@ -162,11 +199,9 @@ export class SpeakerDiarization {
       const cleanText = content.trim().replace(/\n+/g, ' ');
       
       if (cleanText.length > 0) {
-        segments.push({
-          startTime,
-          endTime,
-          text: cleanText
-        });
+        // Split on >> markers to create separate speaker turns
+        const speakerTurns = this.splitBySpeakerMarkers(cleanText, startTime, endTime);
+        segments.push(...speakerTurns);
       }
     }
     

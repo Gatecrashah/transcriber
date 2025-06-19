@@ -31,12 +31,24 @@ def process_audio(audio_path, auth_token, model_version="3.1", device="cpu"):
         JSON formatted diarization results
     """
     try:
-        # Initialize pipeline
+        # Initialize pipeline - try cache-first approach for offline capability
         pipeline_name = f"pyannote/speaker-diarization-{model_version}"
-        pipeline = Pipeline.from_pretrained(
-            pipeline_name,
-            use_auth_token=auth_token
-        )
+        
+        # First attempt: Load from local cache (offline, no token needed)
+        try:
+            pipeline = Pipeline.from_pretrained(pipeline_name)
+            print(f"✅ Loaded {pipeline_name} from local cache (offline mode)", file=sys.stderr)
+        except Exception as cache_error:
+            # Fallback: Download with auth token (requires internet)
+            if not auth_token:
+                raise Exception(f"Model not in cache and no auth token provided. Cache error: {cache_error}")
+            
+            print(f"📥 Cache miss, downloading {pipeline_name} with auth token...", file=sys.stderr)
+            pipeline = Pipeline.from_pretrained(
+                pipeline_name,
+                use_auth_token=auth_token
+            )
+            print(f"✅ Downloaded and cached {pipeline_name}", file=sys.stderr)
         
         # Move to GPU if available and requested
         if device == "cuda" and torch.cuda.is_available():
@@ -83,7 +95,7 @@ def process_audio(audio_path, auth_token, model_version="3.1", device="cpu"):
 def main():
     parser = argparse.ArgumentParser(description="Pyannote Speaker Diarization")
     parser.add_argument("audio_path", help="Path to audio file")
-    parser.add_argument("--auth-token", required=True, help="Hugging Face auth token")
+    parser.add_argument("--auth-token", required=False, help="Hugging Face auth token (required for first download only)")
     parser.add_argument("--model-version", default="3.1", help="Pipeline version")
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda", "mps"], help="Processing device")
     parser.add_argument("--output", help="Output JSON file path (optional)")

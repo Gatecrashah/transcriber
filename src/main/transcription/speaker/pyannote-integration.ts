@@ -97,13 +97,9 @@ export class PyannoteIntegration {
 
   async diarizeAudio(audioPath: string): Promise<PyannoteResult> {
     return new Promise((resolve) => {
+      // Auth token is now optional - will be needed only for first download
       if (!this.authToken) {
-        resolve({
-          success: false,
-          error: 'Hugging Face auth token not configured. Please set HUGGINGFACE_TOKEN in .env file',
-          error_type: 'AuthenticationError'
-        });
-        return;
+        console.warn('⚠️ No Hugging Face token provided - attempting to load from cache');
       }
 
       if (!fs.existsSync(audioPath)) {
@@ -115,16 +111,20 @@ export class PyannoteIntegration {
         return;
       }
 
-      // Use version 2.1 for faster ONNX-based processing
-      const modelVersion = process.env.PYANNOTE_VERSION || '2.1';
+      // Use version 3.0 for faster ONNX-based processing with better models
+      const modelVersion = process.env.PYANNOTE_VERSION || '3.0';
       
       const args = [
         this.scriptPath,
         audioPath,
-        '--auth-token', this.authToken,
         '--device', this.device,
         '--model-version', modelVersion
       ];
+      
+      // Only add auth token if available
+      if (this.authToken) {
+        args.push('--auth-token', this.authToken);
+      }
 
       console.log(`🚀 Pyannote config: version=${modelVersion}, device=${this.device}`);
       console.log(`Starting pyannote diarization: ${this.pythonPath} ${args.join(' ')}`);
@@ -227,6 +227,8 @@ export class PyannoteIntegration {
   }
 
   isConfigured(): boolean {
-    return !!this.authToken;
+    // Now configured means we either have a token OR models are cached
+    // We'll let the Python script handle the fallback logic
+    return true;
   }
 }

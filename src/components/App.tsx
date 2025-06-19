@@ -1,14 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Mic, Square, PanelRightOpen, PanelRightClose, ArrowLeft } from 'lucide-react';
+import { Mic, Square, PanelRightOpen, PanelRightClose, ArrowLeft, Sparkles } from 'lucide-react';
 import { NotepadEditor } from './NotepadEditor';
 import { TranscriptionPanel } from './TranscriptionPanel';
 import { Homepage } from './Homepage';
 import { ErrorBoundary } from './ErrorBoundary';
+import { AIEnhancementToggle } from './AIEnhancementToggle';
+import { EnhancedNoteDisplay } from './EnhancedNoteDisplay';
 import { useAudioRecording } from '../hooks/useAudioRecording';
 import { useTranscription } from '../hooks/useTranscription';
 import { useNoteManagement } from '../hooks/useNoteManagement';
+import { useNoteEnhancement } from '../hooks/useNoteEnhancement';
 import { formatSpeakerTranscribedText, formatTranscribedText } from '../utils/textFormatter';
+import '../styles/app.css';
+import '../styles/notepad.css';
+import '../styles/homepage.css';
+import '../styles/transcription-panel.css';
 import '../styles/error-boundary.css';
+import '../styles/ai-enhancement-toggle.css';
+import '../styles/enhanced-note-display.css';
 
 export const App: React.FC = () => {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -27,7 +36,6 @@ export const App: React.FC = () => {
     updateCurrentNote,
     deleteNote,
     addTranscriptionToCurrentNote,
-    removeTranscriptionFromCurrentNote,
   } = useNoteManagement();
   
   const {
@@ -42,6 +50,7 @@ export const App: React.FC = () => {
     error: audioError
   } = useAudioRecording();
 
+
   const {
     transcribe,
     transcribeDualStreams,
@@ -49,6 +58,26 @@ export const App: React.FC = () => {
     error: transcriptionError,
     checkInstallation
   } = useTranscription();
+
+  // Get transcription text for AI enhancement
+  const transcriptionText = currentNote?.transcriptions?.map(t => t.text).join('\n\n') || '';
+  
+  // Note enhancement functionality
+  const {
+    viewMode,
+    hasUserNotes,
+    hasAIEnhancements,
+    isProcessing: isEnhancing,
+    isEnhancementAvailable,
+    contentSections,
+    setViewMode,
+    enhanceNote,
+    error: enhancementError
+  } = useNoteEnhancement({
+    currentNote,
+    transcriptionText,
+    onNoteUpdate: updateCurrentNote
+  });
 
   // Initialize audio and transcription systems
   useEffect(() => {
@@ -190,15 +219,25 @@ export const App: React.FC = () => {
             
             if (transcriptionResult.success && transcriptionResult.text.trim()) {
               console.log('RAW SPEAKER TRANSCRIPTION:', transcriptionResult.text);
-              // Apply speaker-specific formatting to clean up timestamps while preserving speaker labels
-              const formattedText = formatSpeakerTranscribedText(transcriptionResult.text.trim());
-              console.log('SPEAKER-IDENTIFIED TRANSCRIPTION:', formattedText);
               
-              // Parse speaker segments for structured storage
-              const speakers = parseSpeakerSegments(formattedText);
-              
-              // Add transcription to current note
-              addTranscriptionToNote(formattedText, speakers, 'base');
+              // Use structured speaker data if available (from pyannote/diarization)
+              if (transcriptionResult.speakers && transcriptionResult.speakers.length > 0) {
+                console.log(`✅ Using structured speaker data: ${transcriptionResult.speakers.length} segments`);
+                
+                // Add transcription to current note with structured speaker segments
+                addTranscriptionToNote(transcriptionResult.text, transcriptionResult.speakers, 'base');
+              } else {
+                console.log('⚠️ No structured speakers found, parsing text for speaker markers');
+                // Fallback: Apply speaker-specific formatting to clean up timestamps while preserving speaker labels
+                const formattedText = formatSpeakerTranscribedText(transcriptionResult.text.trim());
+                console.log('SPEAKER-IDENTIFIED TRANSCRIPTION:', formattedText);
+                
+                // Parse speaker segments for structured storage
+                const speakers = parseSpeakerSegments(formattedText);
+                
+                // Add transcription to current note
+                addTranscriptionToNote(formattedText, speakers, 'base');
+              }
             } else {
               console.error('❌ Dual-stream transcription failed:', transcriptionResult);
             }
@@ -325,13 +364,33 @@ export const App: React.FC = () => {
           <div className="note-date">{formatDate()}</div>
         </div>
 
-        {/* Notepad Editor */}
+        {/* AI Enhancement Toggle */}
+        <ErrorBoundary>
+          <AIEnhancementToggle
+            currentMode={viewMode}
+            hasAIEnhancements={hasAIEnhancements}
+            hasUserNotes={hasUserNotes}
+            isProcessing={isEnhancing}
+            onModeChange={setViewMode}
+          />
+        </ErrorBoundary>
+
+        {/* Enhanced Note Display or Regular Editor */}
         <div className="editor-container">
           <ErrorBoundary>
-            <NotepadEditor 
-              initialContent={currentNote?.content || ''}
-              onContentChange={(content) => updateCurrentNote({ content })}
-            />
+            {hasAIEnhancements && viewMode !== 'user-only' ? (
+              <EnhancedNoteDisplay
+                contentSections={contentSections}
+                viewMode={viewMode}
+                isProcessing={isEnhancing}
+                error={enhancementError}
+              />
+            ) : (
+              <NotepadEditor 
+                initialContent={currentNote?.content || ''}
+                onContentChange={(content) => updateCurrentNote({ content })}
+              />
+            )}
           </ErrorBoundary>
         </div>
 
@@ -388,18 +447,55 @@ export const App: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  /* Single stream fallback */
-                  <div className="audio-bars">
-                    {[...Array(3)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="audio-bar"
-                        style={{
-                          animationDelay: `${i * 0.1}s`,
-                          height: `${Math.min(100, 20 + audioLevel * 0.8)}%`,
-                        }}
-                      />
-                    ))}
+                  /* Single stream fallback - show active stream with label */
+                  <div className="single-audio-bars">
+                    {systemAudioActive && !microphoneAudioActive ? (
+                      <div className="audio-stream">
+                        <div className="stream-label">🔊</div>
+                        <div className="audio-bars">
+                          {[...Array(4)].map((_, i) => (
+                            <div
+                              key={`sys-${i}`}
+                              className="audio-bar system-audio"
+                              style={{
+                                animationDelay: `${i * 0.1}s`,
+                                height: `${Math.min(100, 20 + systemAudioLevel * 0.8)}%`,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ) : microphoneAudioActive && !systemAudioActive ? (
+                      <div className="audio-stream">
+                        <div className="stream-label">🎤</div>
+                        <div className="audio-bars">
+                          {[...Array(4)].map((_, i) => (
+                            <div
+                              key={`mic-${i}`}
+                              className="audio-bar microphone-audio"
+                              style={{
+                                animationDelay: `${i * 0.1}s`,
+                                height: `${Math.min(100, 20 + microphoneAudioLevel * 0.8)}%`,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      /* Neither stream active - fallback */
+                      <div className="audio-bars">
+                        {[...Array(3)].map((_, i) => (
+                          <div
+                            key={i}
+                            className="audio-bar"
+                            style={{
+                              animationDelay: `${i * 0.1}s`,
+                              height: `${Math.min(100, 20 + audioLevel * 0.8)}%`,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -424,6 +520,28 @@ export const App: React.FC = () => {
               <div className="spinner" />
               <span>Transcribing...</span>
             </div>
+          )}
+
+          {/* AI Enhancement Button */}
+          {isEnhancementAvailable && !hasAIEnhancements && !isRecording && (
+            <button
+              className="enhance-button"
+              onClick={() => enhanceNote()}
+              disabled={isEnhancing}
+              title="Enhance notes with AI"
+            >
+              {isEnhancing ? (
+                <>
+                  <div className="spinner" />
+                  <span>Enhancing...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles size={16} />
+                  <span>Enhance with AI</span>
+                </>
+              )}
+            </button>
           )}
         </div>
 
