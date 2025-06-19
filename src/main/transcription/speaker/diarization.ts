@@ -292,13 +292,20 @@ export class SpeakerDiarization {
       if (speakerSegments.length > 0) {
         segments.push(...speakerSegments);
       } else {
-        // Final fallback: treat as single speaker
-        segments.push({
-          speaker: 'Speaker A',
-          text: transcriptionText.trim(),
-          startTime: 0,
-          endTime: 0
-        });
+        // Final fallback: treat as single speaker (but check for hallucination)
+        const cleanText = transcriptionText.trim();
+        
+        // Skip if it looks like hallucination
+        if (this.isLikelyHallucination(cleanText)) {
+          console.warn('⚠️ Skipping fallback segment - appears to be hallucination');
+        } else if (cleanText.length > 0) {
+          segments.push({
+            speaker: 'Speaker A',
+            text: cleanText,
+            startTime: 0,
+            endTime: 0
+          });
+        }
       }
     }
     
@@ -441,6 +448,24 @@ export class SpeakerDiarization {
     }
     
     return segments;
+  }
+
+  /**
+   * Check if text is likely a hallucination pattern
+   */
+  private isLikelyHallucination(text: string): boolean {
+    if (!text || text.trim().length === 0) return true;
+    
+    const hallucinations = [
+      /\[BLANK_AUDIO\]/gi,
+      /\[PAUSE\]/gi,
+      /\[COUGH\]/gi,
+      /^\s*\[.*\]\s*$/,  // Only brackets content
+      /^(.{1,10})\1{3,}$/,  // Repetitive short text
+      /\b(um|uh|er|ah)\b.*\1.*\1/gi,  // Repetitive filler words
+    ];
+    
+    return hallucinations.some(pattern => pattern.test(text));
   }
 
   /**

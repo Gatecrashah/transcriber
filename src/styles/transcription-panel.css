@@ -418,15 +418,39 @@
   color: #7d8590;
   margin: 4px 12px 0;
   text-align: center;
-  opacity: 0.6;
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .chat-bubble-container.user-speaker .chat-bubble-time {
-  text-align: right;
+  justify-content: flex-end;
 }
 
 .chat-bubble-container.other-speaker .chat-bubble-time {
-  text-align: left;
+  justify-content: flex-start;
+}
+
+.speaker-label {
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  color: #e1e7ef;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.time-separator {
+  color: #7d8590;
+  font-weight: normal;
+}
+
+.timestamp {
+  color: #7d8590;
+  font-weight: normal;
 }
 
 /* Speaker identification for different speakers */
@@ -435,6 +459,7 @@
 }
 
 /* Color variations for different speakers */
+/* Legacy tinydiarize format */
 .chat-bubble-container[data-speaker*="Turn 1"] .chat-bubble,
 .chat-bubble-container[data-speaker*="A"] .chat-bubble {
   background: #5a9fd4; /* Blue */
@@ -458,6 +483,39 @@
 .chat-bubble-container[data-speaker*="Turn 5"] .chat-bubble,
 .chat-bubble-container[data-speaker*="E"] .chat-bubble {
   background: #f54e4e; /* Red */
+}
+
+/* Pyannote format (SPEAKER_XX) */
+.chat-bubble-container[data-speaker="SPEAKER_00"] .chat-bubble {
+  background: #5a9fd4; /* Blue */
+}
+
+.chat-bubble-container[data-speaker="SPEAKER_01"] .chat-bubble {
+  background: #6cc04a; /* Green */
+}
+
+.chat-bubble-container[data-speaker="SPEAKER_02"] .chat-bubble {
+  background: #ff8c42; /* Orange */
+}
+
+.chat-bubble-container[data-speaker="SPEAKER_03"] .chat-bubble {
+  background: #d566be; /* Purple */
+}
+
+.chat-bubble-container[data-speaker="SPEAKER_04"] .chat-bubble {
+  background: #f54e4e; /* Red */
+}
+
+.chat-bubble-container[data-speaker="SPEAKER_05"] .chat-bubble {
+  background: #fbbf24; /* Yellow */
+}
+
+.chat-bubble-container[data-speaker="SPEAKER_06"] .chat-bubble {
+  background: #10b981; /* Emerald */
+}
+
+.chat-bubble-container[data-speaker="SPEAKER_07"] .chat-bubble {
+  background: #8b5cf6; /* Violet */
 }
 
 /* Responsive */

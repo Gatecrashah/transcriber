@@ -232,7 +232,11 @@ export const TranscriptionPanel: React.FC<TranscriptionPanelProps> = ({
                         <span className="inserted-badge">✓</span>
                       )}
                     </div>
-                    <div className="chat-bubble-time">{formatTime(segment.timestamp)}</div>
+                    <div className="chat-bubble-time">
+                      <span className="speaker-label">{segment.speaker || 'Unknown'}</span>
+                      <span className="time-separator">•</span>
+                      <span className="timestamp">{formatTime(segment.timestamp)}</span>
+                    </div>
                   </div>
                 );
               } else {
