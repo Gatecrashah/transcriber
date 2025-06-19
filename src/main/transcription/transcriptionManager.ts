@@ -180,23 +180,26 @@ export class TranscriptionManager {
 
       // Add diarization if enabled
       if (options.enableDiarization) {
-        if (this.hasTinydiarizeModel()) {
-          // Use tinydiarize model for mono audio speaker diarization
+        if (options.usePyannote) {
+          // Use pyannote for speaker diarization - run regular whisper for clean transcription
+          console.log('🎙️ Speaker diarization will use pyannote.audio (skipping tinydiarize)');
+          console.log('🔧 Running regular whisper for clean transcription + timestamps');
+        } else if (this.hasTinydiarizeModel()) {
+          // Fall back to tinydiarize model for mono audio speaker diarization
           const tdrz1ModelPath = this.getTinydiarizeModelPath();
           args[1] = tdrz1ModelPath; // Replace the model path with tinydiarize model
           args.push('--tinydiarize');
-          console.log('🎙️ Speaker diarization enabled (tinydiarize for mono audio)');
+          console.log('🎙️ Speaker diarization enabled (tinydiarize fallback)');
           console.log(`📁 Using tinydiarize model: ${tdrz1ModelPath}`);
           console.log('🔧 Whisper args with tinydiarize:', args);
         } else {
-          console.warn('⚠️ Tinydiarize model not found, diarization will be disabled');
-          console.log('   Run download-tinydiarize-model.sh to enable speaker diarization');
-          // Don't add diarization flags if model is missing
+          console.warn('⚠️ No diarization available - neither pyannote nor tinydiarize found');
+          console.log('   Install pyannote.audio or run download-tinydiarize-model.sh');
         }
       }
 
       // Add output format - prefer JSON for diarization to get speaker timestamps
-      if ((options.enableDiarization && this.hasTinydiarizeModel()) || 
+      if ((options.enableDiarization && !options.usePyannote && this.hasTinydiarizeModel()) || 
           (options.enableDiarization && options.usePyannote) || 
           options.outputFormat === 'json') {
         args.push('--output-json');
@@ -240,14 +243,22 @@ export class TranscriptionManager {
               console.log(`✅ Pyannote found ${pyannoteSegments.length} speaker segments`);
               speakers = diarization.combineWithTranscription(pyannoteSegments, transcribedText);
             } else {
-              console.log('⚠️ Pyannote returned no segments, falling back to tinydiarize parsing');
-              speakers = diarization.parseTranscriptionForMultipleSpeakers(transcribedText);
+              if (transcribedText.includes('[SPEAKER_TURN]')) {
+                console.log('⚠️ Pyannote returned no segments, falling back to tinydiarize parsing');
+                speakers = diarization.parseTranscriptionForMultipleSpeakers(transcribedText);
+              } else {
+                console.log('⚠️ Pyannote returned no segments and no tinydiarize markers found');
+              }
             }
           } catch (error) {
             console.error('❌ Pyannote diarization failed:', error);
-            console.log('🔄 Falling back to tinydiarize parsing...');
-            const diarization = new SpeakerDiarization();
-            speakers = diarization.parseTranscriptionForMultipleSpeakers(transcribedText);
+            if (transcribedText.includes('[SPEAKER_TURN]')) {
+              console.log('🔄 Falling back to tinydiarize parsing...');
+              const diarization = new SpeakerDiarization();
+              speakers = diarization.parseTranscriptionForMultipleSpeakers(transcribedText);
+            } else {
+              console.log('⚠️ No fallback available - pyannote failed and no tinydiarize markers found');
+            }
           }
         } else if (options.enableDiarization) {
           // Use existing tinydiarize logic
