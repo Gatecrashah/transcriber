@@ -44,8 +44,8 @@ export class PyannoteIntegration {
       console.warn('HUGGINGFACE_TOKEN not found in environment variables');
     }
     
-    // Device preference
-    this.device = process.env.PYANNOTE_DEVICE || 'cpu';
+    // Device preference - default to MPS on Apple Silicon for speed
+    this.device = process.env.PYANNOTE_DEVICE || this.detectBestDevice();
   }
 
   private findScriptPath(): string {
@@ -71,6 +71,15 @@ export class PyannoteIntegration {
     // If none found, return the first option and let it fail gracefully
     console.warn('⚠️ Pyannote script not found in any expected location');
     return possiblePaths[0];
+  }
+
+  private detectBestDevice(): string {
+    // On Apple Silicon, prefer MPS for significant speed boost
+    if (process.platform === 'darwin') {
+      return 'mps';
+    }
+    // On other platforms, default to CPU (user can override with CUDA if available)
+    return 'cpu';
   }
 
   private findPythonPath(): string {
@@ -106,13 +115,18 @@ export class PyannoteIntegration {
         return;
       }
 
+      // Use version 2.1 for faster ONNX-based processing
+      const modelVersion = process.env.PYANNOTE_VERSION || '2.1';
+      
       const args = [
         this.scriptPath,
         audioPath,
         '--auth-token', this.authToken,
-        '--device', this.device
+        '--device', this.device,
+        '--model-version', modelVersion
       ];
 
+      console.log(`🚀 Pyannote config: version=${modelVersion}, device=${this.device}`);
       console.log(`Starting pyannote diarization: ${this.pythonPath} ${args.join(' ')}`);
 
       const pythonProcess = spawn(this.pythonPath, args, {
