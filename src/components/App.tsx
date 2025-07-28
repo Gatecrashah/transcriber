@@ -1,23 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Mic, Square, PanelRightOpen, PanelRightClose, ArrowLeft, Sparkles } from 'lucide-react';
+import { Mic, Square, PanelRightOpen, PanelRightClose, ArrowLeft } from 'lucide-react';
 import { NotepadEditor } from './NotepadEditor';
 import { TranscriptionPanel } from './TranscriptionPanel';
 import { Homepage } from './Homepage';
 import { ErrorBoundary } from './ErrorBoundary';
-import { AIEnhancementToggle } from './AIEnhancementToggle';
-import { EnhancedNoteDisplay } from './EnhancedNoteDisplay';
 import { useAudioRecording } from '../hooks/useAudioRecording';
 import { useTranscription } from '../hooks/useTranscription';
 import { useNoteManagement } from '../hooks/useNoteManagement';
-import { useNoteEnhancement } from '../hooks/useNoteEnhancement';
 import { formatSpeakerTranscribedText, formatTranscribedText } from '../utils/textFormatter';
 import '../styles/app.css';
 import '../styles/notepad.css';
 import '../styles/homepage.css';
 import '../styles/transcription-panel.css';
 import '../styles/error-boundary.css';
-import '../styles/ai-enhancement-toggle.css';
-import '../styles/enhanced-note-display.css';
 
 export const App: React.FC = () => {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -59,25 +54,6 @@ export const App: React.FC = () => {
     checkInstallation
   } = useTranscription();
 
-  // Get transcription text for AI enhancement
-  const transcriptionText = currentNote?.transcriptions?.map(t => t.text).join('\n\n') || '';
-  
-  // Note enhancement functionality
-  const {
-    viewMode,
-    hasUserNotes,
-    hasAIEnhancements,
-    isProcessing: isEnhancing,
-    isEnhancementAvailable,
-    contentSections,
-    setViewMode,
-    enhanceNote,
-    error: enhancementError
-  } = useNoteEnhancement({
-    currentNote,
-    transcriptionText,
-    onNoteUpdate: updateCurrentNote
-  });
 
   // Initialize audio and transcription systems
   useEffect(() => {
@@ -364,33 +340,14 @@ export const App: React.FC = () => {
           <div className="note-date">{formatDate()}</div>
         </div>
 
-        {/* AI Enhancement Toggle */}
-        <ErrorBoundary>
-          <AIEnhancementToggle
-            currentMode={viewMode}
-            hasAIEnhancements={hasAIEnhancements}
-            hasUserNotes={hasUserNotes}
-            isProcessing={isEnhancing}
-            onModeChange={setViewMode}
-          />
-        </ErrorBoundary>
 
-        {/* Enhanced Note Display or Regular Editor */}
+        {/* Note Editor */}
         <div className="editor-container">
           <ErrorBoundary>
-            {hasAIEnhancements && viewMode !== 'user-only' ? (
-              <EnhancedNoteDisplay
-                contentSections={contentSections}
-                viewMode={viewMode}
-                isProcessing={isEnhancing}
-                error={enhancementError}
-              />
-            ) : (
-              <NotepadEditor 
-                initialContent={currentNote?.content || ''}
-                onContentChange={(content) => updateCurrentNote({ content })}
-              />
-            )}
+            <NotepadEditor 
+              initialContent={currentNote?.content || ''}
+              onContentChange={(content) => updateCurrentNote({ content })}
+            />
           </ErrorBoundary>
         </div>
 
@@ -522,27 +479,6 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* AI Enhancement Button */}
-          {isEnhancementAvailable && !hasAIEnhancements && !isRecording && (
-            <button
-              className="enhance-button"
-              onClick={() => enhanceNote()}
-              disabled={isEnhancing}
-              title="Enhance notes with AI"
-            >
-              {isEnhancing ? (
-                <>
-                  <div className="spinner" />
-                  <span>Enhancing...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles size={16} />
-                  <span>Enhance with AI</span>
-                </>
-              )}
-            </button>
-          )}
         </div>
 
         {/* Error Messages */}

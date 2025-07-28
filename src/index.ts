@@ -1,7 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import { setupAudioIPC, cleanupAudioIPC } from './main/ipc/audioIPC';
 import { TranscriptionIPC } from './main/ipc/transcriptionIPC';
-import { LLMIPCStub } from './main/ipc/llmIPCStub'; // Using stub until ESM import issues are resolved
 import { config } from 'dotenv';
 import squirrelStartup from 'electron-squirrel-startup';
 
@@ -72,7 +71,6 @@ app.on('ready', () => {
   try {
     setupAudioIPC();
     new TranscriptionIPC(); // Initialize transcription IPC handlers
-    LLMIPCStub.initialize(); // Initialize LLM stub handlers (LLM disabled temporarily)
     
     createWindow();
   } catch (error) {
@@ -85,7 +83,6 @@ app.on('ready', () => {
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   cleanupAudioIPC();
-  LLMIPCStub.cleanup(); // Cleanup LLM stub handlers
   if (process.platform !== 'darwin') {
     app.quit();
   }
