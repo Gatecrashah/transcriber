@@ -28,11 +28,54 @@ export interface TranscriptionOptions {
   speakerLabel?: string;
   systemSpeakerName?: string;
   microphoneSpeakerName?: string;
+  
+  // Swift-native specific options (backwards compatible)
+  useSwiftNative?: boolean; // Enable Swift-native processing (default: true)
+  fluidAudioEnabled?: boolean; // Enable FluidAudio diarization (default: true)
+  realTimeProcessing?: boolean; // Enable real-time processing (future feature)
+  
+  // Legacy options (deprecated but maintained for compatibility)
+  usePyannote?: boolean; // Deprecated: FluidAudio is now used instead
+  tinydiarizeEnabled?: boolean; // Deprecated: FluidAudio is now used instead
 }
 
 export interface TranscriptionInstallationResult {
   installed: boolean;
   error?: string;
+  isSwiftNative?: boolean; // New: indicates Swift-native processing
+  systemInfo?: SwiftNativeSystemInfo; // New: Swift system information
+  availableModels?: SwiftNativeModel[]; // New: Available WhisperKit models
+  performance?: string; // New: Performance information
+}
+
+// Swift-native specific interfaces
+export interface SwiftNativeSystemInfo {
+  isInitialized: boolean;
+  isProcessing: boolean;
+  whisperModel: {
+    name: string;
+    isLoaded: boolean;
+    memoryUsage: string;
+  };
+  fluidAudioInfo?: {
+    isInitialized: boolean;
+    vadAccuracy: string;
+    diarizationError: string;
+    memoryUsage: string;
+  };
+  capabilities: {
+    supportsRealTime: boolean;
+    supportsSpeakerDiarization: boolean;
+    supportsMultipleLanguages: boolean;
+    maxAudioLength: number;
+    supportedFormats: string[];
+  };
+}
+
+export interface SwiftNativeModel {
+  id: string;
+  name: string;
+  memoryRequirement: string;
 }
 
 export interface WhisperModelInfo {

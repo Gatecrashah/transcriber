@@ -3,6 +3,7 @@ import TranscriperCore
 
 class AudioCaptureApp {
     private let audioCapture = AudioCapture()
+    private var swiftBridge: SwiftAudioBridge?
     private var isRunning = false
     
     func run() {
@@ -32,6 +33,19 @@ class AudioCaptureApp {
             stopRecording()
         case "check-permissions":
             checkPermissions()
+        case "init":
+            initializeProcessing()
+        case "process":
+            if args.count >= 3 {
+                processAudioFile(args[2])
+            } else {
+                print("Error: process command requires file path")
+                exit(1)
+            }
+        case "system-info":
+            getSystemInfo()
+        case "models":
+            getAvailableModels()
         default:
             printUsage()
         }
@@ -109,6 +123,82 @@ class AudioCaptureApp {
         exit(hasPermissions ? 0 : 1)
     }
     
+    private func initializeProcessing() {
+        if #available(macOS 14.0, *) {
+            swiftBridge = SwiftAudioBridge()
+            let success = swiftBridge!.initialize()
+            
+            if success {
+                print("SUCCESS: SwiftAudioBridge initialized")
+                exit(0)
+            } else {
+                print("ERROR: SwiftAudioBridge initialization failed")
+                exit(1)
+            }
+        } else {
+            print("ERROR: Requires macOS 14.0 or later")
+            exit(1)
+        }
+    }
+    
+    private func processAudioFile(_ filePath: String) {
+        if swiftBridge == nil {
+            if #available(macOS 14.0, *) {
+                swiftBridge = SwiftAudioBridge()
+                let success = swiftBridge!.initialize()
+                
+                if !success {
+                    print("ERROR: Failed to initialize SwiftAudioBridge")
+                    exit(1)
+                }
+            } else {
+                print("ERROR: Requires macOS 14.0 or later")
+                exit(1)
+            }
+        }
+        
+        let result = swiftBridge!.processAudioFile(filePath)
+        print(result) // Output JSON result to stdout
+        exit(0)
+    }
+    
+    private func getSystemInfo() {
+        if swiftBridge == nil {
+            if #available(macOS 14.0, *) {
+                swiftBridge = SwiftAudioBridge()
+                let success = swiftBridge!.initialize()
+                
+                if !success {
+                    print("ERROR: Failed to initialize SwiftAudioBridge")
+                    exit(1)
+                }
+            } else {
+                print("ERROR: Requires macOS 14.0 or later")
+                exit(1)
+            }
+        }
+        
+        let info = swiftBridge!.getSystemInfo()
+        print(info) // Output JSON info to stdout
+        exit(0)
+    }
+    
+    private func getAvailableModels() {
+        if swiftBridge == nil {
+            if #available(macOS 14.0, *) {
+                swiftBridge = SwiftAudioBridge()
+                _ = swiftBridge!.initialize() // Don't fail if this doesn't work for models query
+            } else {
+                print("ERROR: Requires macOS 14.0 or later")
+                exit(1)
+            }
+        }
+        
+        let models = swiftBridge!.getAvailableModels()
+        print(models) // Output JSON models to stdout
+        exit(0)
+    }
+    
     private func stop() {
         isRunning = false
         if let filePath = audioCapture.stopRecording() {
@@ -118,12 +208,18 @@ class AudioCaptureApp {
     }
     
     private func printUsage() {
-        print("Usage: audio-capture [start|start-system|stop|check-permissions]")
-        print("Commands:")
+        print("Usage: audio-capture [command] [options]")
+        print("Recording Commands:")
         print("  start              - Start recording microphone input")
         print("  start-system       - Start system audio capture (macOS 14.4+)")
         print("  stop               - Stop current recording")
         print("  check-permissions  - Check if audio permissions are granted")
+        print("")
+        print("Processing Commands (Swift-native pipeline):")
+        print("  init               - Initialize SwiftAudioBridge processing system")
+        print("  process <file>     - Process audio file and output JSON result")
+        print("  system-info        - Get system processing information as JSON")
+        print("  models             - Get available WhisperKit models as JSON")
     }
 }
 

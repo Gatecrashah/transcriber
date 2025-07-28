@@ -8,7 +8,8 @@ let package = Package(
     ],
     products: [
         .executable(name: "audio-capture", targets: ["AudioCaptureApp"]),
-        .library(name: "TranscriperCore", targets: ["TranscriperCore"])
+        .library(name: "TranscriperCore", targets: ["TranscriperCore"]),
+        .library(name: "TranscriperNative", type: .dynamic, targets: ["TranscriperNative"])
     ],
     dependencies: [
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.8.0"),
@@ -38,6 +39,15 @@ let package = Package(
                 "UnifiedAudioProcessor.swift",
                 "SwiftAudioBridge.swift"
             ]
+        ),
+        
+        // Dynamic library target for Node.js integration
+        .target(
+            name: "TranscriperNative",
+            dependencies: ["TranscriperCore"],
+            path: "Native",
+            sources: ["TranscriperNative.swift"],
+            publicHeadersPath: "include"
         )
     ]
 )
