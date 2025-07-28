@@ -1,4 +1,5 @@
 import Foundation
+import TranscriperCore
 
 class AudioCaptureApp {
     private let audioCapture = AudioCapture()

@@ -1,0 +1,14 @@
+# Swift Package Manager build artifacts
+.build/
+Package.resolved
+
+# Temporary test files
+/tmp/
+*.tmp
+*.temp
+
+# macOS
+.DS_Store
+
+# Test audio files
+test_audio/
