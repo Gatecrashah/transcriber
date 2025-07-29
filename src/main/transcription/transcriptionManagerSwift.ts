@@ -56,7 +56,7 @@ export class TranscriptionManager {
         // Log available models for debugging
         try {
           const models = await nativeAudioProcessor.getAvailableModels();
-          const modelNames = models.models?.map((m: any) => m.name).join(', ') || 'Unknown';
+          const modelNames = models.models?.map((m) => m.name).join(', ') || 'Unknown';
           console.log(`📋 Available models: ${modelNames}`);
         } catch (error) {
           console.warn('⚠️ Could not fetch available models:', error);
@@ -308,7 +308,11 @@ export class TranscriptionManager {
   /**
    * Get available models from the Swift processing system
    */
-  async getAvailableModels(): Promise<any> {
+  async getAvailableModels(): Promise<{
+    success: boolean;
+    models?: Array<{ name: string; size: string; description: string; }>;
+    error?: string;
+  }> {
     try {
       if (!this.isInitialized) {
         await this.initialize();
@@ -323,7 +327,14 @@ export class TranscriptionManager {
   /**
    * Get system information from the Swift processing system
    */
-  async getSystemInfo(): Promise<any> {
+  async getSystemInfo(): Promise<{
+    success: boolean;
+    whisperVersion?: string;
+    fluidAudioVersion?: string;
+    metalSupport?: boolean;
+    availableModels?: string[];
+    error?: string;
+  }> {
     try {
       if (!this.isInitialized) {
         await this.initialize();

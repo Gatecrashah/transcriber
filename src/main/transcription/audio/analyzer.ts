@@ -90,7 +90,7 @@ export class AudioAnalyzer {
           stderr += data.toString();
         });
         
-        ffmpeg.on('close', (_code: number | null) => {
+        ffmpeg.on('close', () => {
           // Parse ffmpeg output for audio info
           const durationMatch = stderr.match(/Duration: (\d+):(\d+):(\d+\.\d+)/);
           const bitrateMatch = stderr.match(/bitrate: (\d+) kb\/s/);
@@ -135,7 +135,7 @@ export class AudioAnalyzer {
           });
         }, 5000);
       });
-    } catch (error) {
+    } catch {
       return {
         hasAudio: true,
         info: 'Analysis error, assuming audio present'

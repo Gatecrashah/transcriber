@@ -321,7 +321,7 @@ describe('useNoteManagement - Transcription Linking', () => {
       const { result } = renderHook(() => useNoteManagement());
 
       // Create multiple notes with different transcriptions
-      let noteId1: string, noteId2: string;
+      let noteId1: string;
 
       act(() => {
         const note1 = result.current.createNewNote();

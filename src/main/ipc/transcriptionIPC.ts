@@ -4,6 +4,7 @@ import { TranscriptionManager, TranscriptionResult } from '../transcription/tran
 export class TranscriptionIPC {
   private transcriptionManager: TranscriptionManager;
   private isInitialized = false;
+  private initializationPromise: Promise<boolean> | null = null;
 
   constructor() {
     console.log('🚀 Initializing TranscriptionIPC with Swift-native processing...');
@@ -11,10 +12,10 @@ export class TranscriptionIPC {
     this.setupHandlers();
     
     // Initialize the Swift processing system
-    this.initializeSwiftProcessing();
+    this.initializationPromise = this.initializeSwiftProcessing();
   }
 
-  private async initializeSwiftProcessing() {
+  private async initializeSwiftProcessing(): Promise<boolean> {
     try {
       console.log('🔄 Initializing Swift-native transcription system...');
       const success = await this.transcriptionManager.initialize();
@@ -22,11 +23,14 @@ export class TranscriptionIPC {
       if (success) {
         this.isInitialized = true;
         console.log('✅ Swift-native transcription system initialized successfully');
+        return true;
       } else {
         console.error('❌ Failed to initialize Swift-native transcription system');
+        return false;
       }
     } catch (error) {
       console.error('❌ Error initializing Swift-native transcription system:', error);
+      return false;
     }
   }
 
@@ -34,6 +38,19 @@ export class TranscriptionIPC {
     // Check if Swift-native transcription system is ready
     ipcMain.handle('transcription:check-installation', async () => {
       try {
+        // Wait for initialization if it's still in progress
+        if (!this.isInitialized && this.initializationPromise) {
+          console.log('⏳ Waiting for Swift-native transcription system to initialize...');
+          const success = await this.initializationPromise;
+          if (!success) {
+            return {
+              installed: false,
+              error: 'Swift-native transcription system failed to initialize',
+              isSwiftNative: true
+            };
+          }
+        }
+
         // For Swift-native system, check if it's initialized and get system info
         if (!this.isInitialized) {
           return {

@@ -1,6 +1,25 @@
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 import { spawn } from 'child_process';
 import { TranscriptionResult, SpeakerSegment } from '../types/transcription';
+
+// Swift processing result interfaces
+interface SwiftSegment {
+  speakerId?: string;
+  text: string;
+  startTime: number;
+  endTime: number;
+  confidence?: number;
+}
+
+interface SwiftProcessingResult {
+  success: boolean;
+  text?: string;
+  duration?: number;
+  segments?: SwiftSegment[];
+  error?: string;
+}
 
 // Path to the Swift executable that wraps our native processing
 const swiftExecutablePath = path.join(__dirname, '../../src/native/swift/.build/arm64-apple-macosx/release/audio-capture');
@@ -104,14 +123,19 @@ export class NativeAudioProcessor {
         if (code === 0) {
           try {
             // Extract JSON from the output (filter out logging)
+            // The JSON is at the end of the output after all initialization logs
             const lines = jsonOutput.split('\n');
-            const jsonLine = lines.find(line => line.trim().startsWith('{'));
+            const jsonStartIndex = lines.findIndex(line => line.trim().startsWith('{'));
             
-            if (!jsonLine) {
+            if (jsonStartIndex === -1) {
               throw new Error('No JSON result found in output');
             }
             
-            const swiftResult = JSON.parse(jsonLine);
+            // Get all lines from the JSON start to the end and join them
+            const jsonLines = lines.slice(jsonStartIndex);
+            const jsonString = jsonLines.join('\n').trim();
+            
+            const swiftResult = JSON.parse(jsonString);
             const transcriptionResult = this.convertSwiftResultToTranscriptionResult(swiftResult);
             
             console.log(`✅ Audio file processed successfully: ${transcriptionResult.text.length} characters, ${transcriptionResult.speakers?.length || 0} speakers`);
@@ -154,8 +178,6 @@ export class NativeAudioProcessor {
     
     // For now, we'll need to create a temporary WAV file since our Swift CLI expects file paths
     // TODO: Implement direct buffer processing in Swift CLI
-    const fs = require('fs');
-    const os = require('os');
     const tempFilePath = path.join(os.tmpdir(), `temp_audio_${Date.now()}.wav`);
     
     try {
@@ -175,7 +197,9 @@ export class NativeAudioProcessor {
       // Clean up temporary file if it exists
       try {
         fs.unlinkSync(tempFilePath);
-      } catch {}
+      } catch {
+        // Ignore cleanup errors
+      }
       
       console.error('❌ Audio buffer processing failed:', error);
       throw new Error(`Audio buffer processing failed: ${error}`);
@@ -186,7 +210,6 @@ export class NativeAudioProcessor {
    * Helper method to write audio data to a WAV file
    */
   private async writeAudioDataToFile(audioData: Float32Array, sampleRate: number, channels: number, filePath: string): Promise<void> {
-    const fs = require('fs');
     
     // Simple WAV file creation (16-bit PCM)
     const buffer = Buffer.alloc(44 + audioData.length * 2);
@@ -219,7 +242,14 @@ export class NativeAudioProcessor {
   /**
    * Get system information about the Swift processing pipeline
    */
-  public async getSystemInfo(): Promise<any> {
+  public async getSystemInfo(): Promise<{
+    success: boolean;
+    whisperVersion?: string;
+    fluidAudioVersion?: string;
+    metalSupport?: boolean;
+    availableModels?: string[];
+    error?: string;
+  }> {
     return new Promise((resolve, reject) => {
       const infoCommand = spawn(swiftExecutablePath, ['system-info']);
       
@@ -238,14 +268,19 @@ export class NativeAudioProcessor {
         if (code === 0) {
           try {
             // Extract JSON from the output (filter out logging)
+            // The JSON is at the end of the output after all initialization logs
             const lines = jsonOutput.split('\n');
-            const jsonLine = lines.find(line => line.trim().startsWith('{'));
+            const jsonStartIndex = lines.findIndex(line => line.trim().startsWith('{'));
             
-            if (!jsonLine) {
+            if (jsonStartIndex === -1) {
               throw new Error('No JSON result found in system info output');
             }
             
-            const systemInfo = JSON.parse(jsonLine);
+            // Get all lines from the JSON start to the end and join them
+            const jsonLines = lines.slice(jsonStartIndex);
+            const jsonString = jsonLines.join('\n').trim();
+            
+            const systemInfo = JSON.parse(jsonString);
             resolve(systemInfo);
             
           } catch (error) {
@@ -270,7 +305,15 @@ export class NativeAudioProcessor {
   /**
    * Get available WhisperKit models
    */
-  public async getAvailableModels(): Promise<any> {
+  public async getAvailableModels(): Promise<{
+    success: boolean;
+    models?: Array<{
+      name: string;
+      size: string;
+      description: string;
+    }>;
+    error?: string;
+  }> {
     return new Promise((resolve, reject) => {
       const modelsCommand = spawn(swiftExecutablePath, ['models']);
       
@@ -289,14 +332,19 @@ export class NativeAudioProcessor {
         if (code === 0) {
           try {
             // Extract JSON from the output (filter out logging)
+            // The JSON is at the end of the output after all initialization logs
             const lines = jsonOutput.split('\n');
-            const jsonLine = lines.find(line => line.trim().startsWith('{'));
+            const jsonStartIndex = lines.findIndex(line => line.trim().startsWith('{'));
             
-            if (!jsonLine) {
+            if (jsonStartIndex === -1) {
               throw new Error('No JSON result found in models output');
             }
             
-            const modelsInfo = JSON.parse(jsonLine);
+            // Get all lines from the JSON start to the end and join them
+            const jsonLines = lines.slice(jsonStartIndex);
+            const jsonString = jsonLines.join('\n').trim();
+            
+            const modelsInfo = JSON.parse(jsonString);
             resolve(modelsInfo);
             
           } catch (error) {
@@ -322,7 +370,7 @@ export class NativeAudioProcessor {
    * Convert Swift processing result to TypeScript TranscriptionResult format
    * Ensures compatibility with existing React UI components
    */
-  private convertSwiftResultToTranscriptionResult(swiftResult: any): TranscriptionResult {
+  private convertSwiftResultToTranscriptionResult(swiftResult: SwiftProcessingResult): TranscriptionResult {
     // Handle error cases
     if (!swiftResult || !swiftResult.success) {
       return {
@@ -335,7 +383,7 @@ export class NativeAudioProcessor {
     }
 
     // Convert Swift segments to our SpeakerSegment format
-    const speakers: SpeakerSegment[] = swiftResult.segments?.map((segment: any) => {
+    const speakers: SpeakerSegment[] = swiftResult.segments?.map((segment: SwiftSegment) => {
       // Map Swift speaker IDs to more readable names
       let speakerName = segment.speakerId || 'Unknown';
       

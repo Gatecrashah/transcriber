@@ -28,8 +28,7 @@ const createWindow = (): void => {
       nodeIntegration: false,
       contextIsolation: true,
       allowRunningInsecureContent: false,
-      experimentalFeatures: true,
-      enableBlinkFeatures: 'WebCodecs'
+      experimentalFeatures: true
     },
   });
 
@@ -51,7 +50,7 @@ const createWindow = (): void => {
       callback({ 
         video: mainWindow.webContents.mainFrame, 
         audio: 'loopback' 
-      } as any);
+      });
     });
   } catch (error) {
     console.log('setDisplayMediaRequestHandler not available:', error);
@@ -60,8 +59,8 @@ const createWindow = (): void => {
   // and load the index.html of the app.
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 
-  // Open the DevTools.
-  mainWindow.webContents.openDevTools();
+  // Open DevTools only in development (comment out to disable)
+  // mainWindow.webContents.openDevTools();
 };
 
 // This method will be called when Electron has finished
