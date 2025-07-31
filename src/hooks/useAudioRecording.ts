@@ -39,6 +39,7 @@ interface AudioRecordingResult {
   message?: string;
 }
 
+
 export const useAudioRecording = () => {
   const [state, setState] = useState<AudioRecordingState>({
     isRecording: false,
@@ -451,12 +452,8 @@ export const useAudioRecording = () => {
 
   // Helper function to save audio file with stream type
   const saveAudioFile = async (audioBlob: Blob, streamType?: string): Promise<string> => {
-    // Convert blob to array buffer
     const arrayBuffer = await audioBlob.arrayBuffer();
     
-    console.log(`Saving audio file for stream: ${streamType || 'default'}`);
-    
-    // If we have Electron API, use it to save the file
     if (window.electronAPI?.audio?.saveAudioFile) {
       const result = await window.electronAPI.audio.saveAudioFile(arrayBuffer);
       if (result.success) {
@@ -771,7 +768,7 @@ export const useAudioRecording = () => {
           }
         };
         
-        systemRecorder.start(1000); // Record in 1-second chunks
+        systemRecorder.start(1000); // Record in 1-second chunks for data collection
         console.log('✅ System audio recording started');
       } catch (error) {
         console.error('❌ Failed to start system audio recorder:', error);
@@ -802,7 +799,7 @@ export const useAudioRecording = () => {
           }
         };
         
-        microphoneRecorder.start(1000); // Record in 1-second chunks  
+        microphoneRecorder.start(1000); // Record in 1-second chunks for data collection
         console.log('✅ Microphone audio recording started');
       } catch (error) {
         console.error('❌ Failed to start microphone recorder:', error);
@@ -886,7 +883,7 @@ export const useAudioRecording = () => {
       }
     };
     
-    recorder.start(1000);
+    recorder.start(1000); // Record in 1-second chunks for data collection
     console.log('🎬 Recording started');
     
     // Store only essential data
@@ -910,6 +907,7 @@ export const useAudioRecording = () => {
       message: `System audio capture started using ${method}`
     };
   };
+
 
   return {
     isRecording: state.isRecording,
