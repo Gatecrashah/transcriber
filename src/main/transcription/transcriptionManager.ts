@@ -1,6 +1,6 @@
 // MIGRATED TO SWIFT-NATIVE PROCESSING
 // This file now uses the Swift-native WhisperKit + FluidAudio pipeline
-// providing 97.7x performance improvements over the old whisper.cpp approach
+// providing high-performance native audio transcription
 
 import { TranscriptionManager as SwiftTranscriptionManager } from './transcriptionManagerSwift';
 
@@ -11,6 +11,6 @@ export { TranscriptionResult, SpeakerSegment } from './transcriptionManagerSwift
 export class TranscriptionManager extends SwiftTranscriptionManager {
   constructor() {
     super();
-    console.log('🚀 Using Swift-native TranscriptionManager (97.7x faster than whisper.cpp)');
+    console.log('🚀 Using Swift-native TranscriptionManager with WhisperKit + FluidAudio');
   }
 }
