@@ -3,7 +3,7 @@ import { convertWebMToWav } from '../utils/audioConversion';
 import { getAudioLevel } from '../utils/audioLevel';
 import { saveAudioFile } from '../utils/audioFileManager';
 
-// Extend Window interface for global dual audio capture object
+// Extend Window interface for dual audio capture object
 declare global {
   interface Window {
     __audioCapture?: {
@@ -13,8 +13,6 @@ declare global {
       stop?: () => void;
       getSystemChunks?: () => Blob[];
       getMicrophoneChunks?: () => Blob[];
-      // Legacy single stream support
-      getChunks?: () => Blob[];
       // Audio level monitoring
       systemAnalyser?: AnalyserNode;
       microphoneAnalyser?: AnalyserNode;
@@ -184,36 +182,6 @@ export const useAudioRecording = () => {
           }
         }
         
-        // Handle legacy single stream recording
-        else {
-          const chunks = audioCapture.getChunks ? audioCapture.getChunks() : [];
-          
-          if (chunks && chunks.length > 0) {
-            console.log('📁 Processing', chunks.length, 'single-stream audio chunks...');
-            
-            // Combine all audio chunks into a single blob
-            const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-            
-            // Convert to WAV format for Whisper compatibility
-            const audioFile = await convertWebMToWav(audioBlob);
-            
-            // Save to temporary file for transcription
-            const audioPath = await saveAudioFile(audioFile);
-            
-            console.log('✅ Audio saved to:', audioPath);
-            
-            // Clean up
-            delete window.__audioCapture;
-            
-            setState(prev => ({ ...prev, isRecording: false, audioLevel: 0 }));
-            return { success: true, audioPath };
-          } else {
-            console.warn('No audio data recorded');
-            delete window.__audioCapture;
-            setState(prev => ({ ...prev, isRecording: false, audioLevel: 0 }));
-            return { success: false, error: 'No audio data recorded' };
-          }
-        }
       }
       
       // Check if we're using native dual capture (no browser recording active)
@@ -557,9 +525,7 @@ export const useAudioRecording = () => {
           }
         },
         getSystemChunks: () => systemAudioChunks,
-        getMicrophoneChunks: () => microphoneAudioChunks,
-        // Legacy support - return mixed chunks
-        getChunks: () => [...systemAudioChunks, ...microphoneAudioChunks]
+        getMicrophoneChunks: () => microphoneAudioChunks
       };
       
       // Update state to reflect which streams are active
