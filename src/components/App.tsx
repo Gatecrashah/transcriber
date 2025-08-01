@@ -1,13 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Mic, Square, PanelRightOpen, PanelRightClose, ArrowLeft } from 'lucide-react';
 import { NotepadEditor } from './NotepadEditor';
 import { TranscriptionPanel } from './TranscriptionPanel';
 import { Homepage } from './Homepage';
 import { ErrorBoundary } from './ErrorBoundary';
+import { AudioVisualizer } from './AudioVisualizer';
 import { useAudioRecording } from '../hooks/useAudioRecording';
 import { useTranscription } from '../hooks/useTranscription';
 import { useNoteManagement } from '../hooks/useNoteManagement';
-import { formatSpeakerTranscribedText, formatTranscribedText } from '../utils/textFormatter';
+import { useNoteTranscription } from '../hooks/useNoteTranscription';
+import { useRecordingHandlers } from '../hooks/useRecordingHandlers';
+import { useAppInitialization } from '../hooks/useAppInitialization';
+// TODO: Create new SwiftKit-compatible text formatter
 import '../styles/app.css';
 import '../styles/notepad.css';
 import '../styles/homepage.css';
@@ -16,8 +20,6 @@ import '../styles/error-boundary.css';
 
 export const App: React.FC = () => {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [initError, setInitError] = useState<string | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
 
 
@@ -54,204 +56,31 @@ export const App: React.FC = () => {
     checkInstallation
   } = useTranscription();
 
+  // Note transcription management
+  const { addTranscriptionToNote } = useNoteTranscription({
+    currentNote,
+    addTranscriptionToCurrentNote,
+    onTranscriptionAdded: () => setIsPanelOpen(true)
+  });
 
-  // Initialize audio and transcription systems
-  useEffect(() => {
-    const initializeApp = async () => {
-      try {
-        console.log('Initializing Transcriper app...');
-        
-        // Initialize audio system
-        if (window.electronAPI?.audio?.initialize) {
-          console.log('Initializing audio system...');
-          const audioResult = await window.electronAPI.audio.initialize();
-          if (!audioResult.success) {
-            throw new Error(`Audio initialization failed: ${audioResult.error}`);
-          }
-          console.log('Audio system initialized successfully');
-        } else {
-          throw new Error('Audio API not available');
-        }
+  // Recording handlers
+  const { handleToggleRecording } = useRecordingHandlers({
+    isRecording,
+    stopRecording,
+    startDualAudioCapture,
+    transcribeDualStreams,
+    transcribe,
+    addTranscriptionToNote
+  });
 
-        // Check transcription installation
-        console.log('Checking transcription system...');
-        const transcriptionResult = await checkInstallation();
-        if (!transcriptionResult.installed) {
-          console.warn(`Transcription system not fully available: ${transcriptionResult.error}`);
-          // Don't throw error - transcription might still work
-        } else {
-          console.log('Transcription system ready');
-        }
+  // App initialization
+  const { isInitialized, initError } = useAppInitialization({
+    checkInstallation
+  });
 
-        setIsInitialized(true);
-        console.log('App initialization complete');
-      } catch (error) {
-        console.error('App initialization failed:', error);
-        setInitError(error instanceof Error ? error.message : 'Unknown initialization error');
-      }
-    };
 
-    initializeApp();
-  }, [checkInstallation]);
 
-  // Helper function to generate unique IDs
-  const generateId = () => {
-    return Date.now().toString(36) + Math.random().toString(36).substring(2);
-  };
 
-  // Helper function to parse speaker segments from formatted text
-  const parseSpeakerSegments = (text: string) => {
-    const segments: Array<{ speaker: string; text: string; startTime: number; endTime: number; }> = [];
-    const lines = text.split('\n');
-    
-    let currentSpeaker = '';
-    let currentText = '';
-    
-    lines.forEach(line => {
-      const speakerMatch = line.match(/^\*\*(.+?):\*\*$/);
-      if (speakerMatch) {
-        // Save previous speaker's text if any
-        if (currentSpeaker && currentText.trim()) {
-          segments.push({
-            speaker: currentSpeaker,
-            text: currentText.trim(),
-            startTime: 0,
-            endTime: 0
-          });
-        }
-        // Start new speaker
-        currentSpeaker = speakerMatch[1];
-        currentText = '';
-      } else if (line.trim() && currentSpeaker) {
-        currentText += (currentText ? ' ' : '') + line.trim();
-      }
-    });
-    
-    // Add final speaker if any
-    if (currentSpeaker && currentText.trim()) {
-      segments.push({
-        speaker: currentSpeaker,
-        text: currentText.trim(),
-        startTime: 0,
-        endTime: 0
-      });
-    }
-    
-    return segments;
-  };
-
-  // Helper function to add transcription to current note
-  const addTranscriptionToNote = (text: string, speakers?: Array<{ speaker: string; text: string; startTime: number; endTime: number; }>, model?: string) => {
-    if (!currentNote) {
-      console.warn('No current note available for transcription');
-      return false;
-    }
-
-    const transcription = {
-      id: generateId(),
-      text: text.trim(),
-      timestamp: new Date(),
-      speakers,
-      model,
-    };
-
-    console.log('Adding transcription to note:', { noteId: currentNote.id, transcriptionId: transcription.id });
-    const success = addTranscriptionToCurrentNote(transcription);
-    
-    if (success) {
-      // Open panel to show the new transcription
-      setIsPanelOpen(true);
-    }
-    
-    return success;
-  };
-
-  const handleToggleRecording = async () => {
-    if (isRecording) {
-      const result = await stopRecording();
-      console.log('🎤 Stop recording result:', result);
-      
-      if (result.success) {
-        console.log('🔄 Starting transcription for dual streams');
-        
-        // Check if we have dual-stream recording results
-        if (result.systemAudioPath || result.microphoneAudioPath) {
-          console.log('🎙️ Using dual-stream transcription with speaker diarization');
-          
-          try {
-            const transcriptionResult = await transcribeDualStreams(
-              result.systemAudioPath,
-              result.microphoneAudioPath,
-              {
-                language: 'en',
-                threads: 8,
-                model: 'base',
-                systemSpeakerName: 'Meeting Participants',
-                microphoneSpeakerName: 'You',
-              }
-            );
-            
-            console.log('🗣️ Dual-stream transcription result:', transcriptionResult);
-            
-            if (transcriptionResult.success && transcriptionResult.text.trim()) {
-              console.log('RAW SPEAKER TRANSCRIPTION:', transcriptionResult.text);
-              
-              // Use structured speaker data if available (from pyannote/diarization)
-              if (transcriptionResult.speakers && transcriptionResult.speakers.length > 0) {
-                console.log(`✅ Using structured speaker data: ${transcriptionResult.speakers.length} segments`);
-                
-                // Add transcription to current note with structured speaker segments
-                addTranscriptionToNote(transcriptionResult.text, transcriptionResult.speakers, 'base');
-              } else {
-                console.log('⚠️ No structured speakers found, parsing text for speaker markers');
-                // Fallback: Apply speaker-specific formatting to clean up timestamps while preserving speaker labels
-                const formattedText = formatSpeakerTranscribedText(transcriptionResult.text.trim());
-                console.log('SPEAKER-IDENTIFIED TRANSCRIPTION:', formattedText);
-                
-                // Parse speaker segments for structured storage
-                const speakers = parseSpeakerSegments(formattedText);
-                
-                // Add transcription to current note
-                addTranscriptionToNote(formattedText, speakers, 'base');
-              }
-            } else {
-              console.error('❌ Dual-stream transcription failed:', transcriptionResult);
-            }
-          } catch (error) {
-            console.error('❌ Dual-stream transcription error:', error);
-          }
-        } 
-        // Fallback to single-stream transcription
-        else if (result.audioPath) {
-          console.log('🔄 Fallback to single-stream transcription for:', result.audioPath);
-          
-          try {
-            const transcriptionResult = await transcribe(result.audioPath, {
-              language: 'en',
-              threads: 8,
-              model: 'base',
-            });
-            
-            if (transcriptionResult.success && transcriptionResult.text.trim()) {
-              const formattedText = formatTranscribedText(transcriptionResult.text.trim());
-              
-              // Add transcription to current note (no speaker segments for single stream)
-              addTranscriptionToNote(formattedText, undefined, 'base');
-            }
-          } catch (error) {
-            console.error('❌ Single-stream transcription error:', error);
-          }
-        } else {
-          console.error('❌ No audio data available for transcription');
-        }
-      } else {
-        console.error('❌ Recording failed:', result);
-      }
-    } else {
-      // Use dual audio capture for both system audio AND microphone simultaneously
-      await startDualAudioCapture();
-    }
-  };
 
   const togglePanel = () => {
     setIsPanelOpen(!isPanelOpen);
@@ -368,94 +197,13 @@ export const App: React.FC = () => {
             </button>
           ) : (
             <div className="recording-controls">
-              <div className="audio-visualizer">
-                {/* Show dual stream indicators when both are active */}
-                {systemAudioActive && microphoneAudioActive ? (
-                  <div className="dual-audio-bars">
-                    <div className="audio-stream">
-                      <div className="stream-label">🔊</div>
-                      <div className="audio-bars">
-                        {[...Array(2)].map((_, i) => (
-                          <div
-                            key={`sys-${i}`}
-                            className="audio-bar system-audio"
-                            style={{
-                              animationDelay: `${i * 0.1}s`,
-                              height: `${Math.min(100, 20 + systemAudioLevel * 0.8)}%`,
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                    <div className="audio-stream">
-                      <div className="stream-label">🎤</div>
-                      <div className="audio-bars">
-                        {[...Array(2)].map((_, i) => (
-                          <div
-                            key={`mic-${i}`}
-                            className="audio-bar microphone-audio"
-                            style={{
-                              animationDelay: `${i * 0.1 + 0.05}s`,
-                              height: `${Math.min(100, 20 + microphoneAudioLevel * 0.8)}%`,
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* Single stream fallback - show active stream with label */
-                  <div className="single-audio-bars">
-                    {systemAudioActive && !microphoneAudioActive ? (
-                      <div className="audio-stream">
-                        <div className="stream-label">🔊</div>
-                        <div className="audio-bars">
-                          {[...Array(4)].map((_, i) => (
-                            <div
-                              key={`sys-${i}`}
-                              className="audio-bar system-audio"
-                              style={{
-                                animationDelay: `${i * 0.1}s`,
-                                height: `${Math.min(100, 20 + systemAudioLevel * 0.8)}%`,
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    ) : microphoneAudioActive && !systemAudioActive ? (
-                      <div className="audio-stream">
-                        <div className="stream-label">🎤</div>
-                        <div className="audio-bars">
-                          {[...Array(4)].map((_, i) => (
-                            <div
-                              key={`mic-${i}`}
-                              className="audio-bar microphone-audio"
-                              style={{
-                                animationDelay: `${i * 0.1}s`,
-                                height: `${Math.min(100, 20 + microphoneAudioLevel * 0.8)}%`,
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      /* Neither stream active - fallback */
-                      <div className="audio-bars">
-                        {[...Array(3)].map((_, i) => (
-                          <div
-                            key={i}
-                            className="audio-bar"
-                            style={{
-                              animationDelay: `${i * 0.1}s`,
-                              height: `${Math.min(100, 20 + audioLevel * 0.8)}%`,
-                            }}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <AudioVisualizer
+                systemAudioLevel={systemAudioLevel}
+                microphoneAudioLevel={microphoneAudioLevel}
+                systemAudioActive={systemAudioActive}
+                microphoneAudioActive={microphoneAudioActive}
+                audioLevel={audioLevel}
+              />
               <button
                 className="stop-button"
                 onClick={handleToggleRecording}
