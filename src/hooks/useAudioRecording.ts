@@ -7,8 +7,6 @@ import { saveAudioFile } from '../utils/audioFileManager';
 declare global {
   interface Window {
     __audioCapture?: {
-      browserBasedRecording?: boolean;
-      isActive?: boolean;
       isDualStream?: boolean;
       stop?: () => void;
       getSystemChunks?: () => Blob[];
@@ -55,33 +53,28 @@ export const useAudioRecording = () => {
   const [levelUpdateInterval, setLevelUpdateInterval] = useState<NodeJS.Timeout | null>(null);
 
 
-  const updateAudioLevel = useCallback(async () => {
-    if (state.isRecording && window.__audioCapture?.browserBasedRecording) {
-      // For browser-based recording, use real Web Audio API analysis
-      if (window.__audioCapture?.isDualStream) {
-        const systemLevel = window.__audioCapture?.systemAnalyser 
-          ? getAudioLevel(window.__audioCapture.systemAnalyser) 
-          : 0;
-        const microphoneLevel = window.__audioCapture?.microphoneAnalyser 
-          ? getAudioLevel(window.__audioCapture.microphoneAnalyser) 
-          : 0;
-        
-        setState(prev => ({ 
-          ...prev, 
-          systemAudioLevel: systemLevel,
-          microphoneAudioLevel: microphoneLevel,
-          audioLevel: Math.max(systemLevel, microphoneLevel) // Combined level is the higher of the two
-        }));
-      }
+  const updateAudioLevel = useCallback(() => {
+    if (state.isRecording && window.__audioCapture) {
+      const systemLevel = window.__audioCapture.systemAnalyser 
+        ? getAudioLevel(window.__audioCapture.systemAnalyser) 
+        : 0;
+      const microphoneLevel = window.__audioCapture.microphoneAnalyser 
+        ? getAudioLevel(window.__audioCapture.microphoneAnalyser) 
+        : 0;
+      
+      setState(prev => ({ 
+        ...prev, 
+        systemAudioLevel: systemLevel,
+        microphoneAudioLevel: microphoneLevel,
+        audioLevel: Math.max(systemLevel, microphoneLevel)
+      }));
     }
   }, [state.isRecording]);
 
   useEffect(() => {
-    // Enable real-time audio level monitoring
     if (state.isRecording) {
       const interval = setInterval(updateAudioLevel, 100);
       setLevelUpdateInterval(interval);
-      console.log('Recording started - real-time audio level monitoring enabled');
     } else {
       if (levelUpdateInterval) {
         clearInterval(levelUpdateInterval);
@@ -109,25 +102,18 @@ export const useAudioRecording = () => {
       const audioCapture = window.__audioCapture;
       
       if (audioCapture) {
-        console.log('🛑 Stopping browser-based audio capture...');
-        
-        // Stop the recording using the simplified interface
+        // Stop the recording
         if (audioCapture.stop) {
           audioCapture.stop();
         }
         
-        // Wait a bit for final data
+        // Wait for final data
         await new Promise(resolve => setTimeout(resolve, 500));
         
         // Handle dual stream recording
         if (audioCapture.isDualStream) {
-          console.log('📁 Processing dual audio streams...');
-          
           const systemChunks = audioCapture.getSystemChunks ? audioCapture.getSystemChunks() : [];
           const microphoneChunks = audioCapture.getMicrophoneChunks ? audioCapture.getMicrophoneChunks() : [];
-          
-          console.log(`🔊 System audio chunks: ${systemChunks.length}`);
-          console.log(`🎤 Microphone audio chunks: ${microphoneChunks.length}`);
           
           let systemAudioPath: string | undefined;
           let microphoneAudioPath: string | undefined;
@@ -138,7 +124,6 @@ export const useAudioRecording = () => {
             const systemBlob = new Blob(systemChunks, { type: 'audio/webm' });
             const systemWav = await convertWebMToWav(systemBlob);
             systemAudioPath = await saveAudioFile(systemWav);
-            console.log('✅ System audio saved to:', systemAudioPath);
           }
           
           // Process microphone audio
@@ -146,7 +131,6 @@ export const useAudioRecording = () => {
             const microphoneBlob = new Blob(microphoneChunks, { type: 'audio/webm' });
             const microphoneWav = await convertWebMToWav(microphoneBlob);
             microphoneAudioPath = await saveAudioFile(microphoneWav);
-            console.log('✅ Microphone audio saved to:', microphoneAudioPath);
           }
           
           // Create combined audio for transcription
@@ -155,7 +139,6 @@ export const useAudioRecording = () => {
             const combinedBlob = new Blob(combinedChunks, { type: 'audio/webm' });
             const combinedWav = await convertWebMToWav(combinedBlob);
             combinedAudioPath = await saveAudioFile(combinedWav);
-            console.log('✅ Combined audio saved to:', combinedAudioPath);
           }
           
           // Clean up
@@ -184,52 +167,7 @@ export const useAudioRecording = () => {
         
       }
       
-      // Check if we're using native dual capture (no browser recording active)
-      if (!audioCapture && window.electronAPI?.audio) {
-        console.log('🛑 Stopping native dual capture...');
-        
-        try {
-          const nativeResult = await window.electronAPI.audio.stopRecording();
-          
-          setState(prev => ({ 
-            ...prev, 
-            isRecording: false, 
-            audioLevel: 0,
-            systemAudioLevel: 0,
-            microphoneAudioLevel: 0,
-            systemAudioActive: false,
-            microphoneAudioActive: false
-          }));
-          
-          if (nativeResult.success && nativeResult.audioPath) {
-            console.log('✅ Native dual capture stopped:', nativeResult.audioPath);
-            
-            // The Swift utility captures both system and microphone in one file
-            // We'll treat this as the combined audio for transcription
-            return {
-              success: true,
-              audioPath: nativeResult.audioPath,
-              systemAudioPath: nativeResult.audioPath, // Same file contains both
-              microphoneAudioPath: nativeResult.audioPath, // Same file contains both  
-              message: 'Native dual capture (system + microphone) completed'
-            };
-          } else {
-            console.log('❌ Native dual capture stop failed:', nativeResult.error);
-            return { success: false, error: nativeResult.error || 'Failed to stop native recording' };
-          }
-        } catch (nativeError) {
-          console.log('❌ Error stopping native dual capture:', nativeError);
-          setState(prev => ({ 
-            ...prev, 
-            isRecording: false, 
-            systemAudioActive: false,
-            microphoneAudioActive: false
-          }));
-          return { success: false, error: 'Failed to stop native recording' };
-        }
-      }
-      
-      // No recording method available
+      // Fallback cleanup
       setState(prev => ({ ...prev, isRecording: false, audioLevel: 0 }));
       return { success: true };
       
@@ -243,136 +181,66 @@ export const useAudioRecording = () => {
 
 
   const startDualAudioCapture = useCallback(async (): Promise<AudioRecordingResult> => {
-    console.log('🚀 startDualAudioCapture function called');
-    
     try {
       setState(prev => ({ ...prev, error: null }));
-      
-      console.log('🎵🎤 Starting dual audio capture (system + microphone)...');
-      
-      // Step 0: Request proper system audio permissions first (like Granola does)
-      console.log('📋 Checking for permission request API...');
-      if (window.electronAPI?.audio?.requestSystemAudioPermission) {
-        console.log('✅ Permission API available, requesting permissions...');
-        try {
-          console.log('🔐 Requesting Screen & System Audio Recording permission (required for headphones)...');
-          const permissionResult = await window.electronAPI.audio.requestSystemAudioPermission();
-          
-          if (permissionResult.success) {
-            console.log('✅ Screen & System Audio Recording permission granted!');
-            console.log(`💡 ${permissionResult.message || 'System audio capture now available'}`);
-          } else if (permissionResult.needsManualPermission) {
-            console.warn('⚠️ Please manually enable Screen Recording permission in System Preferences');
-            console.log('📋 Go to: System Preferences > Privacy & Security > Screen & System Audio Recording');
-            console.log('💡 Then add and enable this app to capture system audio with headphones');
-          } else if (permissionResult.userDenied) {
-            console.warn('❌ User denied system audio permission - falling back to microphone only');
-          }
-        } catch (permissionError) {
-          console.log('Permission request failed, continuing with available methods:', permissionError);
-        }
-      } else {
-        console.log('⚠️ Permission API not available, continuing without permission check');
-      }
-      
-      // Implement proper dual-stream browser-based capture as per CLAUDE.md
-      console.log('🎵 Starting synchronized dual-stream audio capture (CLAUDE.md spec)...');
-      console.log('🌐 Using browser-based MediaDevices API for dual capture');
       
       let systemAudioStream: MediaStream | null = null;
       let microphoneStream: MediaStream | null = null;
       
-      // Step 1: Get system audio - use getDisplayMedia like working version (Electron 36.x)
+      // Get system audio via getDisplayMedia
       try {
-        console.log('🔊 Attempting system audio capture via getDisplayMedia (Electron 36.x)...');
-        console.log('🔊 Using constraints: { audio: true, video: false }');
-        
         const stream = await navigator.mediaDevices.getDisplayMedia({
           audio: true,
           video: false
         });
         
-        console.log('🎵 getDisplayMedia returned stream:', stream);
         const audioTracks = stream.getAudioTracks();
         const videoTracks = stream.getVideoTracks();
-        console.log('🎵 Audio tracks found:', audioTracks.length);
-        console.log('🎵 Video tracks found:', videoTracks.length);
         
         if (audioTracks.length > 0) {
           systemAudioStream = new MediaStream(audioTracks);
-          console.log('✅ System audio stream obtained via browser');
-          console.log('🎵 System audio track details:', audioTracks[0].getSettings());
-          console.log('🎵 System audio track constraints:', audioTracks[0].getConstraints());
-          console.log('🎵 System audio track capabilities:', audioTracks[0].getCapabilities());
-          console.log('🎵 System audio track label:', audioTracks[0].label);
-          console.log('🎵 System audio track kind:', audioTracks[0].kind);
-          console.log('🎵 System audio track enabled:', audioTracks[0].enabled);
-          console.log('🎵 System audio track muted:', audioTracks[0].muted);
-          console.log('🎵 System audio track ready state:', audioTracks[0].readyState);
           setState(prev => ({ ...prev, systemAudioActive: true }));
-        } else {
-          console.log('❌ No audio tracks in getDisplayMedia stream');
         }
         
-        // Stop video tracks immediately to avoid unnecessary video capture
+        // Stop video tracks immediately
         videoTracks.forEach(track => track.stop());
         
-      } catch (systemError) {
-        console.log('⚠️ Browser system audio capture failed:', systemError);
-        console.log('⚠️ Error details:', systemError.name, systemError.message);
-        console.log('⚠️ Trying desktop capturer fallback (like working version)...');
-        
-        // Fallback to desktop capturer approach (like working version)
+      } catch {
+        // Fallback to desktop capturer approach
         try {
-          if (!window.electronAPI?.audio?.getDesktopSources) {
-            throw new Error('Desktop capturer API not available');
-          }
-          
-          const sourcesResult = await window.electronAPI.audio.getDesktopSources();
-          if (!sourcesResult.success || !sourcesResult.sources) {
-            throw new Error(sourcesResult.error || 'Failed to get desktop sources');
-          }
-          
-          console.log('✅ Found', sourcesResult.sources.length, 'desktop sources');
-          
-          const screenSource = sourcesResult.sources.find(source => 
-            source.name.includes('Screen') || source.name.includes('Desktop')
-          );
-          const selectedSource = screenSource || sourcesResult.sources[0];
-          
-          if (!selectedSource) {
-            throw new Error('No suitable desktop source found');
-          }
-          
-          console.log('📱 Selected desktop source:', selectedSource.name);
-          
-          const desktopStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              mandatory: {
-                chromeMediaSource: 'desktop',
-                chromeMediaSourceId: selectedSource.id,
-                echoCancellation: false,
-                noiseSuppression: false,
-                autoGainControl: false
+          if (window.electronAPI?.audio?.getDesktopSources) {
+            const sourcesResult = await window.electronAPI.audio.getDesktopSources();
+            if (sourcesResult.success && sourcesResult.sources) {
+              const selectedSource = sourcesResult.sources.find(source => 
+                source.name.includes('Screen') || source.name.includes('Desktop')
+              ) || sourcesResult.sources[0];
+              
+              if (selectedSource) {
+                const desktopStream = await navigator.mediaDevices.getUserMedia({
+                  audio: {
+                    mandatory: {
+                      chromeMediaSource: 'desktop',
+                      chromeMediaSourceId: selectedSource.id,
+                      echoCancellation: false,
+                      noiseSuppression: false,
+                      autoGainControl: false
+                    }
+                  } as MediaTrackConstraints,
+                  video: false
+                });
+                
+                systemAudioStream = desktopStream;
+                setState(prev => ({ ...prev, systemAudioActive: true }));
               }
-            } as MediaTrackConstraints,
-            video: false
-          });
-          
-          systemAudioStream = desktopStream;
-          console.log('✅ System audio stream obtained via desktop capturer fallback');
-          setState(prev => ({ ...prev, systemAudioActive: true }));
-          
-        } catch (fallbackError) {
-          console.log('❌ Desktop capturer fallback also failed:', fallbackError);
-          console.log('💡 Continuing with microphone-only capture');
+            }
+          }
+        } catch {
+          // Continue without system audio
         }
       }
       
-      // Step 2: Get microphone stream with proper audio constraints
+      // Get microphone stream
       try {
-        console.log('🎤 Attempting microphone audio capture...');
-        console.log('🎤 Using constraints like working version: { audio: { echo/noise/gain }, video: false }');
         microphoneStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
@@ -381,51 +249,23 @@ export const useAudioRecording = () => {
           },
           video: false
         });
-        console.log('✅ Microphone audio stream obtained');
-        const micTrack = microphoneStream.getAudioTracks()[0];
-        if (micTrack) {
-          console.log('🎤 Microphone track details:', micTrack.getSettings());
-          console.log('🎤 Microphone track constraints:', micTrack.getConstraints());
-          console.log('🎤 Microphone track capabilities:', micTrack.getCapabilities());
-          console.log('🎤 Microphone track label:', micTrack.label);
-          console.log('🎤 Microphone track enabled:', micTrack.enabled);
-          console.log('🎤 Microphone track muted:', micTrack.muted);
-          console.log('🎤 Microphone track ready state:', micTrack.readyState);
-        }
         setState(prev => ({ ...prev, microphoneAudioActive: true }));
-      } catch (micError) {
-        console.warn('⚠️ Microphone audio capture failed:', micError);
-        console.warn('⚠️ Microphone error details:', micError.name, micError.message);
-        // Continue without microphone - we might have system audio
+      } catch {
+        // Continue without microphone
       }
       
-      // Check if we got at least one stream (microphone is sufficient)
+      // Check if we got at least one stream
       if (!systemAudioStream && !microphoneStream) {
         throw new Error('Failed to capture any audio stream');
       }
       
-      // Log what we successfully captured
-      if (systemAudioStream && microphoneStream) {
-        console.log('✅ Got both system audio and microphone - full dual capture');
-      } else if (microphoneStream) {
-        console.log('✅ Got microphone only - this is normal with headphones');
-      } else if (systemAudioStream) {
-        console.log('✅ Got system audio only - unusual but workable');
-      }
-      
-      // Step 3: Start synchronized dual recording
-      console.log('🎬 Starting dual recording with synchronized streams');
-      
+      // Start dual recording
       const systemAudioChunks: Blob[] = [];
       const microphoneAudioChunks: Blob[] = [];
       let isRecording = true;
       
       let systemRecorder: MediaRecorder | null = null;
       let microphoneRecorder: MediaRecorder | null = null;
-      
-      // Create synchronized timestamp for both streams
-      const startTime = Date.now();
-      console.log('🕐 Dual recording started at:', new Date(startTime).toISOString());
       
       // Set up Web Audio API for real-time level monitoring
       const audioContext = new AudioContext();
@@ -441,7 +281,6 @@ export const useAudioRecording = () => {
           systemAnalyser.fftSize = 256;
           systemAnalyser.smoothingTimeConstant = 0.8;
           systemSource.connect(systemAnalyser);
-          console.log('📊 System audio analyser connected');
           
           // Configure MediaRecorder for system audio
           systemRecorder = new MediaRecorder(systemAudioStream, {
@@ -455,10 +294,9 @@ export const useAudioRecording = () => {
             }
           };
           
-          systemRecorder.start(1000); // Record in 1-second chunks for data collection
-          console.log('✅ System audio recording started');
+          systemRecorder.start(1000);
         } catch (error) {
-          console.error('❌ Failed to start system audio recorder:', error);
+          console.error('Failed to start system audio recorder:', error);
         }
       }
       
@@ -471,7 +309,6 @@ export const useAudioRecording = () => {
           microphoneAnalyser.fftSize = 256;
           microphoneAnalyser.smoothingTimeConstant = 0.8;
           microphoneSource.connect(microphoneAnalyser);
-          console.log('📊 Microphone audio analyser connected');
           
           // Configure MediaRecorder for microphone audio
           microphoneRecorder = new MediaRecorder(microphoneStream, {
@@ -485,23 +322,19 @@ export const useAudioRecording = () => {
             }
           };
           
-          microphoneRecorder.start(1000); // Record in 1-second chunks for data collection
-          console.log('✅ Microphone audio recording started');
+          microphoneRecorder.start(1000);
         } catch (error) {
-          console.error('❌ Failed to start microphone recorder:', error);
+          console.error('Failed to start microphone recorder:', error);
         }
       }
       
       // Store dual recording data globally
       window.__audioCapture = {
-        isActive: true,
-        browserBasedRecording: true,
         isDualStream: true,
         audioContext,
         systemAnalyser,
         microphoneAnalyser,
         stop: () => {
-          console.log('🛑 Stopping dual audio recording...');
           isRecording = false;
           
           if (systemRecorder && systemRecorder.state === 'recording') {
@@ -536,19 +369,9 @@ export const useAudioRecording = () => {
         microphoneAudioActive: !!microphoneStream
       }));
       
-      const activeStreams = [];
-      if (systemAudioStream) activeStreams.push('system audio');
-      if (microphoneStream) activeStreams.push('microphone');
-      
-      console.log(`✅ Dual recording setup complete: ${activeStreams.join(' + ')}`);
-      
-      return { 
-        success: true,
-        message: `Dual audio capture started: ${activeStreams.join(' + ')}`
-      };
+      return { success: true };
       
     } catch (error) {
-      console.error('❌ Dual audio capture failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       setState(prev => ({ 
         ...prev, 
