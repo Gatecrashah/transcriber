@@ -29,7 +29,6 @@ module.exports = {
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
   moduleNameMapper: {
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
-    '^electron$': '<rootDir>/src/__mocks__/electron.ts',
   },
   testTimeout: 10000,
 };

@@ -13,7 +13,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.8.0"),
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.0.3")
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.1.0")
     ],
     targets: [
         // Main executable target (existing audio capture app)
@@ -23,7 +23,8 @@ let package = Package(
             path: ".",
             sources: ["main.swift"]
         ),
-        
+
+
         // Core library target with all native functionality
         .target(
             name: "TranscriperCore",
@@ -34,13 +35,14 @@ let package = Package(
             path: "Core",
             sources: [
                 "AudioCapture.swift",
-                "WhisperKitManager.swift", 
+                "WhisperKitManager.swift",
                 "FluidAudioManager.swift",
                 "UnifiedAudioProcessor.swift",
                 "SwiftAudioBridge.swift"
             ]
         ),
-        
+
+
         // Dynamic library target for Node.js integration
         .target(
             name: "TranscriperNative",

@@ -5,7 +5,7 @@ class AudioCaptureApp {
     private let audioCapture = AudioCapture()
     private var swiftBridge: SwiftAudioBridge?
     private var isRunning = false
-    
+
     func run() {
         // Setup signal handling for graceful shutdown
         signal(SIGINT) { _ in
@@ -14,16 +14,16 @@ class AudioCaptureApp {
         signal(SIGTERM) { _ in
             exit(0)
         }
-        
+
         // Parse command line arguments
         let args = CommandLine.arguments
         guard args.count > 1 else {
             printUsage()
             return
         }
-        
+
         let command = args[1]
-        
+
         switch command {
         case "start":
             startRecording()
@@ -50,10 +50,10 @@ class AudioCaptureApp {
             printUsage()
         }
     }
-    
+
     private func startRecording() {
         print("Starting system audio recording...")
-        
+
         if audioCapture.startSystemAudioRecording() {
             print("Recording started successfully")
             runRecordingLoop()
@@ -62,10 +62,10 @@ class AudioCaptureApp {
             exit(1)
         }
     }
-    
+
     private func startSystemRecording() {
         print("Starting system audio capture using macOS 14.4+ APIs...")
-        
+
         if audioCapture.startSystemAudioCaptureNew() {
             print("System audio capture started successfully")
             runRecordingLoop()
@@ -75,11 +75,11 @@ class AudioCaptureApp {
             exit(1)
         }
     }
-    
+
     private func runRecordingLoop() {
         // Keep the process alive while recording
         isRunning = true
-        
+
         // Setup signal handlers to stop recording gracefully
         signal(SIGINT) { _ in
             if let app = AudioCaptureApp.shared {
@@ -91,13 +91,13 @@ class AudioCaptureApp {
                 app.handleTermination()
             }
         }
-        
+
         // Run the main loop to keep process alive
         while isRunning {
             RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
         }
     }
-    
+
     func handleTermination() {
         if let filePath = audioCapture.stopRecording() {
             print("Recording stopped. File saved to: \(filePath)")
@@ -105,9 +105,9 @@ class AudioCaptureApp {
         isRunning = false
         exit(0)
     }
-    
+
     static var shared: AudioCaptureApp?
-    
+
     private func stopRecording() {
         if let filePath = audioCapture.stopRecording() {
             print("Recording stopped. File saved to: \(filePath)")
@@ -116,18 +116,18 @@ class AudioCaptureApp {
         }
         stop()
     }
-    
+
     private func checkPermissions() {
         let hasPermissions = audioCapture.requestPermissions()
         print(hasPermissions ? "Permissions granted" : "Permissions denied")
         exit(hasPermissions ? 0 : 1)
     }
-    
+
     private func initializeProcessing() {
         if #available(macOS 14.0, *) {
             swiftBridge = SwiftAudioBridge()
             let success = swiftBridge!.initialize()
-            
+
             if success {
                 print("SUCCESS: SwiftAudioBridge initialized")
                 exit(0)
@@ -140,13 +140,13 @@ class AudioCaptureApp {
             exit(1)
         }
     }
-    
+
     private func processAudioFile(_ filePath: String) {
         if swiftBridge == nil {
             if #available(macOS 14.0, *) {
                 swiftBridge = SwiftAudioBridge()
                 let success = swiftBridge!.initialize()
-                
+
                 if !success {
                     print("ERROR: Failed to initialize SwiftAudioBridge")
                     exit(1)
@@ -156,18 +156,18 @@ class AudioCaptureApp {
                 exit(1)
             }
         }
-        
+
         let result = swiftBridge!.processAudioFile(filePath)
         print(result) // Output JSON result to stdout
         exit(0)
     }
-    
+
     private func getSystemInfo() {
         if swiftBridge == nil {
             if #available(macOS 14.0, *) {
                 swiftBridge = SwiftAudioBridge()
                 let success = swiftBridge!.initialize()
-                
+
                 if !success {
                     print("ERROR: Failed to initialize SwiftAudioBridge")
                     exit(1)
@@ -177,12 +177,12 @@ class AudioCaptureApp {
                 exit(1)
             }
         }
-        
+
         let info = swiftBridge!.getSystemInfo()
         print(info) // Output JSON info to stdout
         exit(0)
     }
-    
+
     private func getAvailableModels() {
         if swiftBridge == nil {
             if #available(macOS 14.0, *) {
@@ -193,12 +193,12 @@ class AudioCaptureApp {
                 exit(1)
             }
         }
-        
+
         let models = swiftBridge!.getAvailableModels()
         print(models) // Output JSON models to stdout
         exit(0)
     }
-    
+
     private func stop() {
         isRunning = false
         if let filePath = audioCapture.stopRecording() {
@@ -206,7 +206,7 @@ class AudioCaptureApp {
         }
         exit(0)
     }
-    
+
     private func printUsage() {
         print("Usage: audio-capture [command] [options]")
         print("Recording Commands:")

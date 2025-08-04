@@ -335,7 +335,6 @@ describe('useNoteManagement - Transcription Linking', () => {
         result.current.saveNote(note1);
 
         const note2 = result.current.createNewNote();
-        noteId2 = note2.id;
         result.current.addTranscriptionToCurrentNote({
           id: 'transcription-note2',
           text: 'Note 2 transcription',

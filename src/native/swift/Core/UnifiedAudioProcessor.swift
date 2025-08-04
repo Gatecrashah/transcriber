@@ -15,9 +15,9 @@ public class UnifiedAudioProcessor: ObservableObject {
         let outputFormat: OutputFormat
 
         public init(enableRealTime: Bool = false,
-                   enableSpeakerDiarization: Bool = true,
-                   whisperModel: WhisperKitManager.ModelType = .base,
-                   outputFormat: OutputFormat = .segmented) {
+                    enableSpeakerDiarization: Bool = true,
+                    whisperModel: WhisperKitManager.ModelType = .base,
+                    outputFormat: OutputFormat = .segmented) {
             self.enableRealTime = enableRealTime
             self.enableSpeakerDiarization = enableSpeakerDiarization
             self.whisperModel = whisperModel
@@ -144,7 +144,8 @@ public class UnifiedAudioProcessor: ObservableObject {
                 text: transcriptionResult.text,
                 language: transcriptionResult.language,
                 segments: speakerSegments,
-                totalSpeakers: config.enableSpeakerDiarization ? Set(speakerSegments.compactMap { $0.speakerId }).count : 0,
+                totalSpeakers: config.enableSpeakerDiarization ?
+                    Set(speakerSegments.compactMap { $0.speakerId }).count : 0,
                 processingTime: processingTime,
                 success: true
             )
@@ -175,29 +176,91 @@ public class UnifiedAudioProcessor: ObservableObject {
         defer { isProcessing = false }
 
         let startTime = Date()
-        print("🎵 Starting unified buffer processing...")
+        print("🎵 Starting optimized unified buffer processing...")
 
         do {
-            // Step 1: Perform transcription
-            print("1️⃣ Running buffer transcription...")
-            let transcriptionResult = try await whisperKit.transcribeAudioBuffer(buffer)
-
-            var speakerSegments: [UnifiedSpeakerSegment] = []
-
-            // Step 2: Perform speaker diarization if enabled
+            // Convert buffer to float array for processing
+            let audioSamples = bufferToFloatArray(buffer)
+            
             if config.enableSpeakerDiarization {
-                print("2️⃣ Running buffer diarization...")
-                let diarizationResult = try await fluidAudio.performDiarization(audioBuffer: buffer)
-
-                // Step 3: Merge results
-                print("3️⃣ Merging buffer results...")
-                speakerSegments = try mergeTranscriptionAndDiarization(
-                    transcription: transcriptionResult,
-                    diarization: diarizationResult
+                // Step 1: Use FluidAudio for VAD + Diarization
+                print("1️⃣ Running VAD + Speaker Diarization...")
+                let processedSegments = try await fluidAudio.processAudioForTranscription(audioSamples: audioSamples)
+                
+                // Early exit if no voice detected
+                if processedSegments.isEmpty {
+                    print("🔇 No voice activity detected, skipping transcription")
+                    return UnifiedProcessingResult(
+                        text: "",
+                        language: "en",
+                        segments: [],
+                        totalSpeakers: 0,
+                        processingTime: Date().timeIntervalSince(startTime),
+                        success: true
+                    )
+                }
+                
+                print("2️⃣ Transcribing \(processedSegments.count) voice segments...")
+                
+                var speakerSegments: [UnifiedSpeakerSegment] = []
+                
+                // Step 2: Transcribe each segment with WhisperKit
+                for (index, segment) in processedSegments.enumerated() {
+                    print("   Transcribing segment \(index + 1)/\(processedSegments.count) (Speaker: \(segment.speakerId))")
+                    
+                    // Convert segment audio to buffer for WhisperKit
+                    let segmentBuffer = floatArrayToBuffer(segment.audioSamples, sampleRate: 16000)
+                    
+                    // Transcribe this segment
+                    let transcriptionResult = try await whisperKit.transcribeAudioBuffer(segmentBuffer)
+                    
+                    // Create unified segment with speaker and transcription
+                    speakerSegments.append(UnifiedSpeakerSegment(
+                        text: transcriptionResult.text,
+                        startTime: segment.startTime,
+                        endTime: segment.endTime,
+                        speakerId: segment.speakerId,
+                        confidence: 0.9 // FluidAudio doesn't return confidence per segment
+                    ))
+                }
+                
+                // Generate final result with speaker diarization
+                let processingTime = Date().timeIntervalSince(startTime)
+                let result = UnifiedProcessingResult(
+                    text: speakerSegments.map { $0.text }.joined(separator: " "),
+                    language: "en",
+                    segments: speakerSegments,
+                    totalSpeakers: Set(speakerSegments.map { $0.speakerId }).count,
+                    processingTime: processingTime,
+                    success: true
                 )
+                
+                print("✅ Processing completed in \(String(format: "%.2f", processingTime))s")
+                return result
+                
             } else {
-                // Convert transcription segments to unified format without speaker info
-                speakerSegments = transcriptionResult.segments.map { segment in
+                // Diarization disabled - just check VAD and transcribe if voice present
+                print("1️⃣ Checking for voice activity...")
+                let hasVoice = try await fluidAudio.performVAD(audioSamples: audioSamples)
+                
+                if !hasVoice {
+                    print("🔇 No voice detected")
+                    return UnifiedProcessingResult(
+                        text: "",
+                        language: "en",
+                        segments: [],
+                        totalSpeakers: 0,
+                        processingTime: Date().timeIntervalSince(startTime),
+                        success: true
+                    )
+                }
+                
+                // Transcribe the entire buffer without speaker info
+                print("2️⃣ Transcribing audio...")
+                let transcriptionResult = try await whisperKit.transcribeAudioBuffer(buffer)
+                
+                // Convert to unified segments without speaker info
+                let speakerSegments = transcriptionResult.segments.map { segment in
                     UnifiedSpeakerSegment(
                         text: segment.text,
                         startTime: segment.startTime,
@@ -206,44 +269,30 @@ public class UnifiedAudioProcessor: ObservableObject {
                         confidence: segment.confidence
                     )
                 }
+                
+                // Generate final result without diarization
+                let processingTime = Date().timeIntervalSince(startTime)
+                let result = UnifiedProcessingResult(
+                    text: transcriptionResult.text,
+                    language: transcriptionResult.language,
+                    segments: speakerSegments,
+                    totalSpeakers: 0,
+                    processingTime: processingTime,
+                    success: true
+                )
+                
+                print("✅ Processing completed in \(String(format: "%.2f", processingTime))s")
+                return result
             }
-
-            let processingTime = Date().timeIntervalSince(startTime)
-            let result = UnifiedProcessingResult(
-                text: transcriptionResult.text,
-                language: transcriptionResult.language,
-                segments: speakerSegments,
-                totalSpeakers: config.enableSpeakerDiarization ? Set(speakerSegments.compactMap { $0.speakerId }).count : 0,
-                processingTime: processingTime,
-                success: true
-            )
-
-            print("✅ Unified buffer processing completed in \(String(format: "%.2f", processingTime))s")
-
-            return result
-
+            
         } catch {
             print("❌ Unified buffer processing failed: \(error)")
             throw UnifiedProcessorError.processingFailed(error.localizedDescription)
         }
     }
 
-    // MARK: - Real-time Processing (Future Implementation)
-
-    public func startRealtimeProcessing() async throws {
-        guard isInitialized else {
-            throw UnifiedProcessorError.notInitialized
-        }
-
-        guard config.enableRealTime else {
-            throw UnifiedProcessorError.realTimeNotEnabled
-        }
-
-        // TODO: Implement real-time processing pipeline
-        // This will be implemented in Phase 3
-        print("🚧 Real-time processing not yet implemented")
-        throw UnifiedProcessorError.notImplemented("Real-time processing")
-    }
+    // MARK: - Real-time Processing
+    // Note: Real-time processing will be implemented in a future version
 
     // MARK: - Result Merging Logic
 
@@ -252,7 +301,8 @@ public class UnifiedAudioProcessor: ObservableObject {
         diarization: FluidAudioDiarizationResult
     ) throws -> [UnifiedSpeakerSegment] {
 
-        print("🔗 Merging transcription (\(transcription.segments.count) segments) with diarization (\(diarization.speakers.count) speakers)")
+        print("🔗 Merging transcription (\(transcription.segments.count) segments) " +
+              "with diarization (\(diarization.speakers.count) speakers)")
 
         var mergedSegments: [UnifiedSpeakerSegment] = []
 
@@ -319,6 +369,47 @@ public class UnifiedAudioProcessor: ObservableObject {
             supportedFormats: ["wav", "mp3", "m4a", "aiff"]
         )
     }
+    
+    // MARK: - Helper Methods
+    
+    private func bufferToFloatArray(_ buffer: AVAudioPCMBuffer) -> [Float] {
+        guard let floatData = buffer.floatChannelData else { return [] }
+        
+        let channelCount = Int(buffer.format.channelCount)
+        let frameLength = Int(buffer.frameLength)
+        var floatArray = [Float]()
+        
+        // If mono, just copy the data
+        if channelCount == 1 {
+            floatArray = Array(UnsafeBufferPointer(start: floatData[0], count: frameLength))
+        } else {
+            // If stereo or more, mix down to mono
+            for frame in 0..<frameLength {
+                var mixedSample: Float = 0
+                for channel in 0..<channelCount {
+                    mixedSample += floatData[channel][frame]
+                }
+                floatArray.append(mixedSample / Float(channelCount))
+            }
+        }
+        
+        return floatArray
+    }
+    
+    private func floatArrayToBuffer(_ floatArray: [Float], sampleRate: Double) -> AVAudioPCMBuffer {
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(floatArray.count))!
+        
+        buffer.frameLength = AVAudioFrameCount(floatArray.count)
+        
+        if let channelData = buffer.floatChannelData {
+            for (index, sample) in floatArray.enumerated() {
+                channelData[0][index] = sample
+            }
+        }
+        
+        return buffer
+    }
 
     // MARK: - Cleanup
 
@@ -338,7 +429,8 @@ public struct UnifiedProcessingResult {
     public let success: Bool
     public let error: String?
 
-    public init(text: String, language: String?, segments: [UnifiedSpeakerSegment], totalSpeakers: Int, processingTime: Double, success: Bool, error: String? = nil) {
+    public init(text: String, language: String?, segments: [UnifiedSpeakerSegment],
+                totalSpeakers: Int, processingTime: Double, success: Bool, error: String? = nil) {
         self.text = text
         self.language = language
         self.segments = segments

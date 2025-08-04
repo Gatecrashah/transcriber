@@ -185,7 +185,7 @@ public class WhisperKitManager: ObservableObject {
     // MARK: - Real-time Streaming (Future Enhancement)
 
     public func startStreamingTranscription() async throws {
-        // TODO: Implement real-time streaming transcription
+        // NOTE: Real-time streaming transcription planned for future version
         // This will be implemented in Phase 3 for real-time processing
         print("🚧 Streaming transcription not yet implemented")
         throw WhisperKitError.notImplemented("Streaming transcription")

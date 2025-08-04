@@ -1,8 +1,14 @@
 import { ipcMain, desktopCapturer } from 'electron';
-import * as fs from 'fs';
-import * as path from 'path';
+import type { TranscriptionManager } from '../transcription/transcriptionManagerSwift';
 
-export function setupAudioIPC(): void {
+// Store reference to transcription manager
+let transcriptionManager: TranscriptionManager | null = null;
+
+export function setupAudioIPC(transcriptionMgr?: TranscriptionManager): void {
+  // Store the transcription manager reference if provided
+  if (transcriptionMgr) {
+    transcriptionManager = transcriptionMgr;
+  }
   // Get available desktop sources for capture
   ipcMain.handle('audio:getDesktopSources', async () => {
     try {
@@ -24,31 +30,86 @@ export function setupAudioIPC(): void {
     }
   });
 
-  // Save audio file from browser recording
+  // DEPRECATED: Save audio file from browser recording
+  // This is kept only for backward compatibility - use processDirectly instead!
   ipcMain.handle('audio:saveAudioFile', async (_, audioData: ArrayBuffer) => {
+    console.warn('⚠️ DEPRECATED: saveAudioFile called - use processDirectly for zero file I/O!');
+    return { 
+      success: false, 
+      error: 'File-based audio processing is deprecated. Use processDirectly for zero file I/O.' 
+    };
+  });
+
+  // NEW: Process audio without saving to file - returns transcription directly!
+  ipcMain.handle('audio:processDirectly', async (_, audioData: ArrayBuffer) => {
     try {
-      const fileName = `recording-${Date.now()}.wav`;
+      console.log('🚀 Direct audio processing - NO FILE I/O!');
       const audioBuffer = Buffer.from(audioData);
       
-      // Create temporary directory if it doesn't exist
-      const tempDir = process.env.TMPDIR ? path.join(process.env.TMPDIR, 'TranscriperAudio') : '/tmp/TranscriperAudio';
+      // Debug: Check first few bytes to identify format
+      const first4Bytes = audioBuffer.slice(0, 4).toString('ascii');
+      console.log(`   First 4 bytes: "${first4Bytes}" (should be "RIFF" for WAV)`);
       
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
+      // Parse WAV header to get audio parameters
+      const sampleRate = audioBuffer.readUInt32LE(24);
+      const channels = audioBuffer.readUInt16LE(22);
+      const bitsPerSample = audioBuffer.readUInt16LE(34);
+      
+      // Skip WAV header (44 bytes) and extract raw audio data
+      const dataStart = 44;
+      const audioDataBytes = audioBuffer.slice(dataStart);
+      
+      // Convert to Float32Array
+      const samples = audioDataBytes.length / (bitsPerSample / 8);
+      const audioFloat32 = new Float32Array(samples);
+      
+      // Debug: Check if we're getting actual audio data
+      let nonZeroSamples = 0;
+      
+      if (bitsPerSample === 16) {
+        for (let i = 0; i < samples; i++) {
+          const sample = audioDataBytes.readInt16LE(i * 2);
+          audioFloat32[i] = sample / 32768.0; // Convert to -1.0 to 1.0 range
+          if (Math.abs(audioFloat32[i]) > 0.001) nonZeroSamples++;
+        }
+      } else if (bitsPerSample === 32) {
+        for (let i = 0; i < samples; i++) {
+          audioFloat32[i] = audioDataBytes.readFloatLE(i * 4);
+          if (Math.abs(audioFloat32[i]) > 0.001) nonZeroSamples++;
+        }
       }
       
-      // Create full file path
-      const filePath = path.join(tempDir, fileName);
+      console.log(`   Sample rate: ${sampleRate}Hz, Channels: ${channels}, Bits: ${bitsPerSample}`);
+      console.log(`   Processing ${audioFloat32.length} samples`);
+      console.log(`   Non-zero samples: ${nonZeroSamples} (${(nonZeroSamples/samples*100).toFixed(1)}%)`);
       
-      // Write the audio buffer to file
-      await fs.promises.writeFile(filePath, audioBuffer);
+      // Debug: Show first few samples
+      const firstSamples = Array.from(audioFloat32.slice(0, 10)).map(s => s.toFixed(4)).join(', ');
+      console.log(`   First 10 samples: [${firstSamples}]`);
       
-      console.log('✅ Audio file saved:', filePath);
-      console.log('   Size:', audioBuffer.length, 'bytes');
+      // Use the existing transcription manager
+      if (!transcriptionManager) {
+        throw new Error('Transcription manager not initialized');
+      }
       
-      return { success: true, audioPath: filePath };
+      // Process through our direct transcription pipeline
+      const result = await transcriptionManager.processAudioBuffer(
+        audioFloat32,
+        sampleRate
+      );
+      
+      return { 
+        success: true, 
+        transcription: result,
+        audioMetadata: {
+          sampleRate,
+          channels,
+          samples: audioFloat32.length,
+          duration: audioFloat32.length / sampleRate
+        }
+      };
     } catch (error) {
-      console.error('❌ Error saving audio file:', error);
+      console.error('❌ Error in direct audio processing:', error);
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Unknown error' 

@@ -148,10 +148,10 @@ enum AudioCaptureError: Error {
             throw AudioCaptureError.fileCreationFailed
         }
 
-        // Create format settings for 16 kHz mono WAV file (whisper.cpp compatible)
+        // Create format settings for 16 kHz mono WAV file (optimal for speech recognition)
         let outputSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: 16000.0,  // 16 kHz required by whisper.cpp
+            AVSampleRateKey: 16000.0,  // 16 kHz optimal for speech recognition
             AVNumberOfChannelsKey: 1,  // Mono
             AVLinearPCMBitDepthKey: 16,
             AVLinearPCMIsBigEndianKey: false,
@@ -170,7 +170,7 @@ enum AudioCaptureError: Error {
         let outputFormat = file.processingFormat
 
         print("Input format: \(inputFormat.sampleRate) Hz, \(inputFormat.channelCount) channels")
-        print("Output format: 16 kHz, 1 channel (whisper.cpp compatible)")
+        print("Output format: 16 kHz, 1 channel (optimized for speech recognition)")
 
         // Create audio converter for format conversion
         guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {

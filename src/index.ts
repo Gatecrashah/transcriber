@@ -68,8 +68,11 @@ const createWindow = (): void => {
 // Some APIs can only be used after this event occurs.
 app.on('ready', () => {
   try {
-    setupAudioIPC();
-    new TranscriptionIPC(); // Initialize transcription IPC handlers
+    // Initialize transcription IPC first
+    const transcriptionIPC = new TranscriptionIPC();
+    
+    // Pass the transcription manager to audio IPC
+    setupAudioIPC(transcriptionIPC.getTranscriptionManager());
     
     createWindow();
   } catch (error) {

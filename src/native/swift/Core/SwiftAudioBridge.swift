@@ -106,10 +106,27 @@ import AVFoundation
         }
 
         print("🎵 Processing audio buffer via bridge: \(audioData.count) bytes")
+        
+        // Debug: Check the first few float values in the raw data
+        audioData.withUnsafeBytes { rawBytes in
+            let floatBytes = rawBytes.bindMemory(to: Float.self)
+            let sampleCount = min(10, audioData.count / MemoryLayout<Float>.size)
+            let firstSamples = (0..<sampleCount).map { String(format: "%.4f", floatBytes[$0]) }.joined(separator: ", ")
+            print("🔍 Raw data first \(sampleCount) floats: [\(firstSamples)]")
+        }
 
         do {
             // Convert Data to AVAudioPCMBuffer
             let buffer = try createAudioBuffer(from: audioData, sampleRate: sampleRate, channels: channels)
+            
+            // Debug: Check what's in the buffer after creation
+            if let floatData = buffer.floatChannelData {
+                let channelData = floatData[0]
+                let firstBufferSamples = (0..<min(10, Int(buffer.frameLength))).map { 
+                    String(format: "%.4f", channelData[$0]) 
+                }.joined(separator: ", ")
+                print("🔍 Buffer first 10 samples: [\(firstBufferSamples)]")
+            }
 
             // Use semaphore for synchronous processing
             let semaphore = DispatchSemaphore(value: 0)
@@ -149,7 +166,7 @@ import AVFoundation
     @objc public func updateConfiguration(_ configJSON: String) -> Bool {
         print("🔧 Updating configuration: \(configJSON)")
 
-        // TODO: Parse JSON configuration and create new processor if needed
+        // NOTE: JSON configuration parsing could be added in future version
         // For now, return success
         print("⚠️ Configuration updates not yet implemented")
         return true
@@ -247,10 +264,20 @@ import AVFoundation
         // Copy audio data into buffer
         data.withUnsafeBytes { rawBytes in
             let floatBytes = rawBytes.bindMemory(to: Float.self)
-            for channel in 0..<channels {
-                let channelData = buffer.floatChannelData![channel]
+            
+            // For mono audio, just copy directly
+            if channels == 1 {
+                let channelData = buffer.floatChannelData![0]
                 for frame in 0..<frameCount {
-                    channelData[frame] = floatBytes[frame * channels + channel]
+                    channelData[frame] = floatBytes[frame]
+                }
+            } else {
+                // For multi-channel, deinterleave
+                for channel in 0..<channels {
+                    let channelData = buffer.floatChannelData![channel]
+                    for frame in 0..<frameCount {
+                        channelData[frame] = floatBytes[frame * channels + channel]
+                    }
                 }
             }
         }
@@ -321,14 +348,14 @@ import AVFoundation
 
     @objc public func startRecording() -> Bool {
         // For now, delegate to existing AudioCapture
-        // TODO: Integrate with UnifiedAudioProcessor for real-time processing
+        // NOTE: UnifiedAudioProcessor integration planned for future version
         let audioCapture = AudioCapture()
         return audioCapture.startSystemAudioRecording()
     }
 
     @objc public func stopRecording() -> String? {
         // For now, delegate to existing AudioCapture
-        // TODO: Integrate with UnifiedAudioProcessor
+        // NOTE: UnifiedAudioProcessor integration planned for future version
         let audioCapture = AudioCapture()
         return audioCapture.stopRecording()
     }

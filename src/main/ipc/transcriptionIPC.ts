@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { TranscriptionManager, TranscriptionResult } from '../transcription/transcriptionManager';
+import { TranscriptionManager, TranscriptionResult } from '../transcription/transcriptionManagerSwift';
 
 export class TranscriptionIPC {
   private transcriptionManager: TranscriptionManager;
@@ -68,7 +68,7 @@ export class TranscriptionIPC {
           isSwiftNative: true,
           systemInfo,
           availableModels: models.models || [],
-          performance: '97.7x faster than whisper.cpp'
+          performance: 'High-performance native processing'
         };
       } catch (error) {
         console.error('Error checking Swift-native installation:', error);
@@ -122,30 +122,26 @@ export class TranscriptionIPC {
           this.isInitialized = true;
         }
         
-        // Note: Swift-native system automatically handles speaker diarization
-        // usePyannote is no longer needed as FluidAudio provides superior diarization
         const swiftOptions = {
           ...options,
-          // Remove old pyannote options as Swift handles diarization natively
-          enableDiarization: options.enableDiarization !== false, // Default to true for Swift
+          enableDiarization: options.enableDiarization !== false,
         };
         
         console.log('🚀 Swift transcription options:', swiftOptions);
-        console.log('💡 Using WhisperKit + FluidAudio (97.7x faster)');
+        console.log('💡 Using WhisperKit + FluidAudio native processing');
         
         const startTime = Date.now();
         const result = await this.transcriptionManager.transcribeFile(filePath, swiftOptions);
         const processingTime = Date.now() - startTime;
         
         if (result.success) {
-          console.log(`⚡ Swift processing completed in ${processingTime}ms`);
-          console.log(`📊 Performance: ${((processingTime / 1000) / (result.duration || 1)).toFixed(2)}x real-time`);
+          console.log(`⚡ Processing completed in ${processingTime}ms`);
           console.log(`🎭 Speakers detected: ${result.speakers?.length || 0}`);
         }
         
         return result;
       } catch (error) {
-        console.error('❌ Swift transcription error:', error);
+        console.error('❌ Transcription error:', error);
         return {
           text: '',
           success: false,
@@ -178,15 +174,13 @@ export class TranscriptionIPC {
           this.isInitialized = true;
         }
         
-        // Swift-native system with FluidAudio provides superior diarization
+        // Remove enableDiarization as it's not part of the Swift options interface
         const swiftOptions = {
-          ...options,
-          // FluidAudio provides 17.7% DER vs ~25% with old pyannote
-          enableDiarization: true, // Always enable for dual streams
+          ...options
         };
         
-        console.log('🚀 Swift dual stream options:', swiftOptions);
-        console.log('💡 Using FluidAudio diarization (17.7% DER, 50x faster)');
+        console.log('🚀 Dual stream options:', swiftOptions);
+        console.log('💡 Using FluidAudio diarization');
         
         const startTime = Date.now();
         const result = await this.transcriptionManager.transcribeDualStreams(
@@ -197,13 +191,13 @@ export class TranscriptionIPC {
         const processingTime = Date.now() - startTime;
         
         if (result.success) {
-          console.log(`⚡ Swift dual stream processing completed in ${processingTime}ms`);
+          console.log(`⚡ Dual stream processing completed in ${processingTime}ms`);
           console.log(`🎭 Total speakers detected: ${result.speakers?.length || 0}`);
         }
         
         return result;
       } catch (error) {
-        console.error('❌ Swift dual stream transcription error:', error);
+        console.error('❌ Dual stream transcription error:', error);
         return {
           text: '',
           success: false,
@@ -279,6 +273,59 @@ export class TranscriptionIPC {
         };
       }
     });
+
+    // NEW: Direct audio buffer transcription - no temp files!
+    ipcMain.handle('transcription:process-audio-buffer', async (_, 
+      audioData: Float32Array, 
+      sampleRate: number,
+      channels: number
+    ) => {
+      try {
+        console.log('🚀 Direct buffer transcription - ZERO FILE I/O!');
+        console.log(`   Buffer size: ${audioData.length} samples`);
+        console.log(`   Sample rate: ${sampleRate}Hz, Channels: ${channels}`);
+        
+        // Ensure Swift system is initialized
+        if (!this.isInitialized) {
+          if (this.initializationPromise) {
+            await this.initializationPromise;
+          } else {
+            const success = await this.transcriptionManager.initialize();
+            if (!success) {
+              return {
+                text: '',
+                success: false,
+                error: 'Swift-native transcription system not available'
+              } as TranscriptionResult;
+            }
+            this.isInitialized = true;
+          }
+        }
+        
+        // Direct processing through our native Swift bridge
+        const result = await this.transcriptionManager.processAudioBuffer(
+          audioData,
+          sampleRate
+        );
+        
+        return result;
+      } catch (error) {
+        console.error('❌ Direct buffer transcription error:', error);
+        return {
+          text: '',
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        } as TranscriptionResult;
+      }
+    });
+
+  }
+
+  /**
+   * Get the transcription manager instance
+   */
+  public getTranscriptionManager(): TranscriptionManager {
+    return this.transcriptionManager;
   }
 
   /**

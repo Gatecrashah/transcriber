@@ -68,8 +68,6 @@ export const App: React.FC = () => {
     isRecording,
     stopRecording,
     startDualAudioCapture,
-    transcribeDualStreams,
-    transcribe,
     addTranscriptionToNote
   });
 

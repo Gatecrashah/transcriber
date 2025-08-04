@@ -24,6 +24,7 @@ export interface NoteTranscription {
   }>;
   processingTime?: number;
   model?: string;
+  isRealtime?: boolean;
 }
 
 export interface NoteCreateOptions {
@@ -53,5 +54,6 @@ export interface SerializedNote {
     speakers?: NoteTranscription['speakers'];
     processingTime?: number;
     model?: string;
+    isRealtime?: boolean;
   }>;
 }

@@ -1,11 +1,12 @@
 import { useCallback } from 'react';
 import type { TranscriptionResult, TranscriptionOptions } from '../types/transcription';
+import { processAudioDirectly } from '../utils/audioFileManager';
 
 interface RecordingResult {
   success: boolean;
-  systemAudioPath?: string;
-  microphoneAudioPath?: string;
-  audioPath?: string;
+  systemAudioBlob?: Blob;
+  microphoneAudioBlob?: Blob;
+  audioBlob?: Blob;
   error?: string;
 }
 
@@ -13,58 +14,157 @@ interface UseRecordingHandlersProps {
   isRecording: boolean;
   stopRecording: () => Promise<RecordingResult>;
   startDualAudioCapture: () => Promise<{ success: boolean }>;
-  transcribeDualStreams: (
-    systemAudioPath?: string,
-    microphoneAudioPath?: string,
-    options?: TranscriptionOptions & {
-      systemSpeakerName?: string;
-      microphoneSpeakerName?: string;
-    }
-  ) => Promise<TranscriptionResult>;
-  transcribe: (audioPath: string, options?: TranscriptionOptions) => Promise<TranscriptionResult>;
   addTranscriptionToNote: (text: string, speakers?: Array<{ speaker: string; text: string; startTime: number; endTime: number; }>, model?: string) => boolean;
 }
+
+// Helper function to clean WhisperKit tokens from text
+const cleanWhisperKitTokens = (text: string): string => {
+  let cleaned = text
+    .replace(/<\|startoftranscript\|>/g, '')
+    .replace(/<\|endoftext\|>/g, '')
+    .replace(/<\|transcribe\|>/g, '')
+    .replace(/<\|translate\|>/g, '')
+    .replace(/<\|notimestamps\|>/g, '')
+    .replace(/<\|[a-z]{2}\|>/g, '') // Language codes like <|en|>
+    .replace(/<\|\d+\.\d+\|>/g, '') // Timestamps like <|0.00|>
+    .replace(/\[BLANK_AUDIO\]/g, '') // Remove blank audio markers
+    .replace(/\[\s*Silence\s*\]/gi, '') // Remove silence markers
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim();
+  
+  return cleaned;
+};
 
 export const useRecordingHandlers = ({
   isRecording,
   stopRecording,
   startDualAudioCapture,
-  transcribeDualStreams,
-  transcribe,
   addTranscriptionToNote
 }: UseRecordingHandlersProps) => {
 
-  // Handle dual-stream transcription processing
+  // Handle dual-stream transcription processing with ZERO FILE I/O!
   const processDualStreamTranscription = useCallback(async (
-    systemAudioPath?: string,
-    microphoneAudioPath?: string
+    systemAudioBlob?: Blob,
+    microphoneAudioBlob?: Blob
   ) => {
-    console.log('🎙️ Using dual-stream transcription with speaker diarization');
+    console.log('🎙️ Using DIRECT dual-stream transcription - NO FILES!');
     
     try {
-      const transcriptionResult = await transcribeDualStreams(
-        systemAudioPath,
-        microphoneAudioPath,
-        {
-          language: 'en',
-          threads: 8,
-          model: 'base',
-          systemSpeakerName: 'Meeting Participants',
-          microphoneSpeakerName: 'You',
+      // Process system audio directly
+      let systemTranscription: TranscriptionResult | undefined;
+      if (systemAudioBlob) {
+        console.log('🚀 Processing system audio directly...');
+        const systemResult = await processAudioDirectly(systemAudioBlob);
+        console.log('📊 System audio result:', systemResult);
+        if (systemResult.transcription) {
+          systemTranscription = systemResult.transcription;
+          console.log('✅ System transcription:', systemTranscription.text?.substring(0, 100));
         }
-      );
+      }
       
-      console.log('🗣️ Dual-stream transcription result:', transcriptionResult);
+      // Process microphone audio directly
+      let micTranscription: TranscriptionResult | undefined;
+      if (microphoneAudioBlob) {
+        console.log('🚀 Processing microphone audio directly...');
+        const micResult = await processAudioDirectly(microphoneAudioBlob);
+        if (micResult.transcription) {
+          micTranscription = micResult.transcription;
+          console.log('✅ Microphone transcription:', micTranscription.text?.substring(0, 100));
+        }
+      }
+      
+      // Combine results
+      const transcriptionResult: TranscriptionResult = {
+        success: !!(systemTranscription || micTranscription),
+        text: '',
+        segments: []
+      };
+      
+      // Check for both 'speakers' (new format) and 'segments' (legacy format)
+      const systemSegments = systemTranscription?.speakers || systemTranscription?.segments;
+      const micSegments = micTranscription?.speakers || micTranscription?.segments;
+      
+      if (systemSegments) {
+        transcriptionResult.segments!.push(...systemSegments.map(seg => {
+          // For system audio, preserve the diarization speaker labels
+          // Don't override with "Meeting Participants" - that's causing confusion
+          const speaker = seg.speaker || 'Unknown Speaker';
+          
+          return {
+            ...seg,
+            text: cleanWhisperKitTokens(seg.text),
+            speaker: speaker
+          };
+        }));
+      }
+      
+      if (micSegments) {
+        transcriptionResult.segments!.push(...micSegments.map(seg => ({
+          ...seg,
+          text: cleanWhisperKitTokens(seg.text),
+          speaker: 'You' // Microphone is always "You"
+        })));
+      }
+      
+      // Sort segments by time
+      transcriptionResult.segments!.sort((a, b) => a.startTime - b.startTime);
+      
+      // Filter out empty segments and remove duplicates
+      const uniqueSegments: typeof transcriptionResult.segments = [];
+      const timeThreshold = 2.0; // 2 seconds
+      
+      for (const segment of transcriptionResult.segments!) {
+        // Skip empty segments after cleaning
+        if (!segment.text || segment.text.trim().length === 0) {
+          console.log('🚫 Skipping empty segment after cleaning');
+          continue;
+        }
+        
+        const isDuplicate = uniqueSegments.some(existing => {
+          const timeDiff = Math.abs(existing.startTime - segment.startTime);
+          const textSimilarity = existing.text.toLowerCase().trim() === segment.text.toLowerCase().trim();
+          return timeDiff < timeThreshold && textSimilarity;
+        });
+        
+        if (!isDuplicate) {
+          uniqueSegments.push(segment);
+        } else {
+          console.log('🔄 Skipping duplicate segment:', segment.text.substring(0, 50));
+        }
+      }
+      
+      transcriptionResult.segments = uniqueSegments;
+      transcriptionResult.text = uniqueSegments.map(s => s.text).join(' ');
+      
+      console.log('🗣️ Dual-stream transcription result:', {
+        success: transcriptionResult.success,
+        textLength: transcriptionResult.text.length,
+        segments: transcriptionResult.segments?.length,
+        textPreview: transcriptionResult.text.substring(0, 100)
+      });
+      
       
       if (transcriptionResult.success && transcriptionResult.text.trim()) {
         console.log('🗣️ Dual-stream transcription completed successfully');
         
-        // Use structured speaker data if available
-        if (transcriptionResult.speakers && transcriptionResult.speakers.length > 0) {
-          console.log(`✅ Using structured speaker data: ${transcriptionResult.speakers.length} segments`);
+        // Use structured speaker data if available - segments ARE the speaker data
+        if (transcriptionResult.segments && transcriptionResult.segments.length > 0) {
+          console.log(`✅ Using structured speaker data: ${transcriptionResult.segments.length} segments`);
+          
+          // Convert segments to the expected format
+          const speakers = transcriptionResult.segments.map(seg => ({
+            speaker: seg.speaker || 'Unknown',
+            text: seg.text,
+            startTime: seg.startTime,
+            endTime: seg.endTime
+          }));
           
           // Add transcription to current note with structured speaker segments
-          addTranscriptionToNote(transcriptionResult.text, transcriptionResult.speakers, 'base');
+          addTranscriptionToNote(transcriptionResult.text, speakers, 'base');
+        } else {
+          // Fallback: add without speaker data
+          console.log('⚠️ No speaker segments available, adding raw text');
+          addTranscriptionToNote(transcriptionResult.text, undefined, 'base');
         }
       } else {
         console.error('❌ Dual-stream transcription failed:', transcriptionResult);
@@ -72,29 +172,29 @@ export const useRecordingHandlers = ({
     } catch (error) {
       console.error('❌ Dual-stream transcription error:', error);
     }
-  }, [transcribeDualStreams, addTranscriptionToNote]);
+  }, [addTranscriptionToNote]);
 
-  // Handle single-stream fallback transcription
-  const processSingleStreamTranscription = useCallback(async (audioPath: string) => {
-    console.log('🔄 Fallback to single-stream transcription for:', audioPath);
+  // Handle single-stream fallback transcription with ZERO FILE I/O!
+  const processSingleStreamTranscription = useCallback(async (audioBlob: Blob) => {
+    console.log('🚀 Direct single-stream transcription - NO FILES!');
     
     try {
-      const transcriptionResult = await transcribe(audioPath, {
-        language: 'en',
-        threads: 8,
-        model: 'base',
-      });
+      const result = await processAudioDirectly(audioBlob);
       
-      if (transcriptionResult.success && transcriptionResult.text.trim()) {
-        const rawText = transcriptionResult.text.trim();
+      if (result.transcription?.success && result.transcription.text.trim()) {
+        const rawText = result.transcription.text.trim();
         
         // Add transcription to current note (no speaker segments for single stream)
         addTranscriptionToNote(rawText, undefined, 'base');
+        
+        console.log(`⚡ Direct transcription completed!`);
+        console.log(`   Duration: ${result.audioMetadata?.duration?.toFixed(2)}s`);
+        console.log(`   Sample rate: ${result.audioMetadata?.sampleRate}Hz`);
       }
     } catch (error) {
       console.error('❌ Single-stream transcription error:', error);
     }
-  }, [transcribe, addTranscriptionToNote]);
+  }, [addTranscriptionToNote]);
 
   // Handle stopping recording and processing transcription
   const handleStopRecording = useCallback(async () => {
@@ -105,12 +205,12 @@ export const useRecordingHandlers = ({
       console.log('🔄 Starting transcription for dual streams');
       
       // Check if we have dual-stream recording results
-      if (result.systemAudioPath || result.microphoneAudioPath) {
-        await processDualStreamTranscription(result.systemAudioPath, result.microphoneAudioPath);
+      if (result.systemAudioBlob || result.microphoneAudioBlob) {
+        await processDualStreamTranscription(result.systemAudioBlob, result.microphoneAudioBlob);
       } 
       // Fallback to single-stream transcription
-      else if (result.audioPath) {
-        await processSingleStreamTranscription(result.audioPath);
+      else if (result.audioBlob) {
+        await processSingleStreamTranscription(result.audioBlob);
       } else {
         console.error('❌ No audio data available for transcription');
       }

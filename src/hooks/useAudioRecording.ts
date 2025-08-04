@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { convertWebMToWav } from '../utils/audioConversion';
 import { getAudioLevel } from '../utils/audioLevel';
-import { saveAudioFile } from '../utils/audioFileManager';
+import { saveAudioFile, processAudioDirectly } from '../utils/audioFileManager';
 
 // Extend Window interface for dual audio capture object
 declare global {
@@ -31,9 +31,9 @@ interface AudioRecordingState {
 
 interface AudioRecordingResult {
   success: boolean;
-  audioPath?: string;
-  systemAudioPath?: string;
-  microphoneAudioPath?: string;
+  audioBlob?: Blob;
+  systemAudioBlob?: Blob;
+  microphoneAudioBlob?: Blob;
   error?: string;
   message?: string;
 }
@@ -115,30 +115,27 @@ export const useAudioRecording = () => {
           const systemChunks = audioCapture.getSystemChunks ? audioCapture.getSystemChunks() : [];
           const microphoneChunks = audioCapture.getMicrophoneChunks ? audioCapture.getMicrophoneChunks() : [];
           
-          let systemAudioPath: string | undefined;
-          let microphoneAudioPath: string | undefined;
-          let combinedAudioPath: string | undefined;
+          let systemAudioBlob: Blob | undefined;
+          let microphoneAudioBlob: Blob | undefined;
+          let combinedAudioBlob: Blob | undefined;
           
           // Process system audio
           if (systemChunks.length > 0) {
             const systemBlob = new Blob(systemChunks, { type: 'audio/webm' });
-            const systemWav = await convertWebMToWav(systemBlob);
-            systemAudioPath = await saveAudioFile(systemWav);
+            systemAudioBlob = await convertWebMToWav(systemBlob);
           }
           
           // Process microphone audio
           if (microphoneChunks.length > 0) {
             const microphoneBlob = new Blob(microphoneChunks, { type: 'audio/webm' });
-            const microphoneWav = await convertWebMToWav(microphoneBlob);
-            microphoneAudioPath = await saveAudioFile(microphoneWav);
+            microphoneAudioBlob = await convertWebMToWav(microphoneBlob);
           }
           
           // Create combined audio for transcription
           if (systemChunks.length > 0 || microphoneChunks.length > 0) {
             const combinedChunks = [...systemChunks, ...microphoneChunks];
             const combinedBlob = new Blob(combinedChunks, { type: 'audio/webm' });
-            const combinedWav = await convertWebMToWav(combinedBlob);
-            combinedAudioPath = await saveAudioFile(combinedWav);
+            combinedAudioBlob = await convertWebMToWav(combinedBlob);
           }
           
           // Clean up
@@ -153,12 +150,12 @@ export const useAudioRecording = () => {
             microphoneAudioActive: false
           }));
           
-          if (systemAudioPath || microphoneAudioPath || combinedAudioPath) {
+          if (systemAudioBlob || microphoneAudioBlob || combinedAudioBlob) {
             return { 
               success: true, 
-              audioPath: combinedAudioPath, // Primary path for transcription
-              systemAudioPath,
-              microphoneAudioPath
+              audioBlob: combinedAudioBlob, // Primary blob for transcription
+              systemAudioBlob,
+              microphoneAudioBlob
             };
           } else {
             return { success: false, error: 'No audio data recorded in either stream' };
