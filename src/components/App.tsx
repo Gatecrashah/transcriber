@@ -5,13 +5,9 @@ import { TranscriptionPanel } from './TranscriptionPanel';
 import { Homepage } from './Homepage';
 import { ErrorBoundary } from './ErrorBoundary';
 import { AudioVisualizer } from './AudioVisualizer';
-import { useAudioRecording } from '../hooks/useAudioRecording';
-import { useTranscription } from '../hooks/useTranscription';
+import { useRecording } from '../hooks/useRecording';
+import { useTranscriptionSystem } from '../hooks/useTranscriptionSystem';
 import { useNoteManagement } from '../hooks/useNoteManagement';
-import { useNoteTranscription } from '../hooks/useNoteTranscription';
-import { useRecordingHandlers } from '../hooks/useRecordingHandlers';
-import { useAppInitialization } from '../hooks/useAppInitialization';
-// TODO: Create new SwiftKit-compatible text formatter
 import '../styles/app.css';
 import '../styles/notepad.css';
 import '../styles/homepage.css';
@@ -23,7 +19,7 @@ export const App: React.FC = () => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
 
 
-  // Note management
+  // Note management with integrated transcription
   const {
     currentNote,
     isOnHomepage,
@@ -32,49 +28,32 @@ export const App: React.FC = () => {
     goToHomepage,
     updateCurrentNote,
     deleteNote,
-    addTranscriptionToCurrentNote,
+    addTranscription,
   } = useNoteManagement();
   
+  // Recording with integrated transcription processing
   const {
     isRecording,
+    isProcessing,
     audioLevel,
     systemAudioLevel,
     microphoneAudioLevel,
     systemAudioActive,
     microphoneAudioActive,
-    startDualAudioCapture,
-    stopRecording,
-    error: audioError
-  } = useAudioRecording();
+    toggleRecording,
+    error: recordingError
+  } = useRecording({
+    onTranscriptionComplete: (text, speakers, model) => {
+      addTranscription(text, speakers, model);
+      setIsPanelOpen(true); // Open panel when transcription is added
+    }
+  });
 
-
+  // System initialization
   const {
-    transcribe,
-    transcribeDualStreams,
-    isTranscribing,
-    error: transcriptionError,
-    checkInstallation
-  } = useTranscription();
-
-  // Note transcription management
-  const { addTranscriptionToNote } = useNoteTranscription({
-    currentNote,
-    addTranscriptionToCurrentNote,
-    onTranscriptionAdded: () => setIsPanelOpen(true)
-  });
-
-  // Recording handlers
-  const { handleToggleRecording } = useRecordingHandlers({
-    isRecording,
-    stopRecording,
-    startDualAudioCapture,
-    addTranscriptionToNote
-  });
-
-  // App initialization
-  const { isInitialized, initError } = useAppInitialization({
-    checkInstallation
-  });
+    isInitialized,
+    error: initError
+  } = useTranscriptionSystem();
 
 
 
@@ -183,8 +162,8 @@ export const App: React.FC = () => {
           {!isRecording ? (
             <button
               className={`record-button ${!isInitialized ? 'initializing' : ''}`}
-              onClick={handleToggleRecording}
-              disabled={!isInitialized || isTranscribing}
+              onClick={toggleRecording}
+              disabled={!isInitialized || isProcessing}
               title={!isInitialized ? 'Initializing...' : 'Start recording'}
             >
               {!isInitialized ? (
@@ -204,7 +183,7 @@ export const App: React.FC = () => {
               />
               <button
                 className="stop-button"
-                onClick={handleToggleRecording}
+                onClick={toggleRecording}
                 title="Stop recording"
               >
                 <Square size={14} />
@@ -218,7 +197,7 @@ export const App: React.FC = () => {
             </div>
           )}
           
-          {isTranscribing && (
+          {isProcessing && (
             <div className="transcribing-indicator">
               <div className="spinner" />
               <span>Transcribing...</span>
@@ -228,9 +207,9 @@ export const App: React.FC = () => {
         </div>
 
         {/* Error Messages */}
-        {(initError || audioError || transcriptionError) && (
+        {(initError || recordingError) && (
           <div className="error-toast">
-            {initError || audioError || transcriptionError}
+            {initError || recordingError}
           </div>
         )}
 

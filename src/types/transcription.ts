@@ -16,6 +16,7 @@ export interface TranscriptionResult {
   error?: string;
   duration?: number;
   speakers?: SpeakerSegment[];
+  segments?: SpeakerSegment[]; // Legacy format compatibility
   language?: string;
 }
 

@@ -142,6 +142,28 @@ export const useNoteManagement = () => {
     return false;
   }, [currentNote, saveNote]);
 
+  // Convenience method for adding transcription with minimal params
+  const addTranscription = useCallback((
+    text: string,
+    speakers?: Array<{ speaker: string; text: string; startTime: number; endTime: number; }>,
+    model?: string
+  ): boolean => {
+    if (!currentNote) {
+      console.warn('No current note available for transcription');
+      return false;
+    }
+
+    const transcription: NoteTranscription = {
+      id: generateId(),
+      text: text.trim(),
+      timestamp: new Date(),
+      speakers,
+      model,
+    };
+
+    return addTranscriptionToCurrentNote(transcription);
+  }, [currentNote, addTranscriptionToCurrentNote]);
+
   const deleteNote = useCallback((noteId: string) => {
     try {
       const savedNotes = localStorage.getItem('transcriper-notes');
@@ -196,5 +218,6 @@ export const useNoteManagement = () => {
     loadNote,
     addTranscriptionToCurrentNote,
     removeTranscriptionFromCurrentNote,
+    addTranscription, // Convenience method for adding transcriptions
   };
 };

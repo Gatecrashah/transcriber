@@ -32,6 +32,7 @@ export function setupAudioIPC(transcriptionMgr?: TranscriptionManager): void {
 
   // DEPRECATED: Save audio file from browser recording
   // This is kept only for backward compatibility - use processDirectly instead!
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   ipcMain.handle('audio:saveAudioFile', async (_, audioData: ArrayBuffer) => {
     console.warn('⚠️ DEPRECATED: saveAudioFile called - use processDirectly for zero file I/O!');
     return { 

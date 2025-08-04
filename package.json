@@ -54,17 +54,14 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@electron/llm": "^1.1.1",
     "@tiptap/extension-placeholder": "^2.14.0",
     "@tiptap/react": "^2.14.0",
     "@tiptap/starter-kit": "^2.14.0",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.6",
-    "dotenv": "^16.5.0",
     "electron-squirrel-startup": "^1.0.1",
     "koffi": "^2.12.3",
     "lucide-react": "^0.513.0",
-    "node-llama-cpp": "^3.10.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   }

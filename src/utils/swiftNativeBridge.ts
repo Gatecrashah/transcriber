@@ -1,42 +1,42 @@
 import koffi from 'koffi';
 import * as path from 'path';
-
-// Koffi type declarations
-declare module 'koffi' {
-  interface IKoffiLib {
-    func(signature: string): any;
-  }
-  function load(path: string): IKoffiLib;
-  function alloc(type: string, count: number): any;
-  function decode(buffer: any, type: string, length?: number): string;
-}
+import type {
+  KoffiLib,
+  TranscriperInitialize,
+  TranscriperIsReady,
+  TranscriperProcessAudioFile,
+  TranscriperProcessAudioBuffer,
+  TranscriperGetSystemInfo,
+  TranscriperGetAvailableModels,
+  TranscriperCleanup
+} from '../types/koffi';
 
 interface SwiftCommandOptions {
   command: string[];
-  parseResult?: (output: string) => any;
+  parseResult?: (output: string) => unknown;
   successPattern?: string;
   timeout?: number;
 }
 
 interface SwiftCommandResult {
   success: boolean;
-  data?: any;
+  data?: unknown;
   error?: string;
 }
 
 export class SwiftNativeBridge {
-  private static lib: any = null;
+  private static lib: KoffiLib | null = null;
   private static isInitialized = false;
   private static readonly BUFFER_SIZE = 1024 * 1024; // 1MB result buffer
 
   // Function type definitions
-  private static transcriper_initialize: any = null;
-  private static transcriper_is_ready: any = null;
-  private static transcriper_process_audio_file: any = null;
-  private static transcriper_process_audio_buffer: any = null;
-  private static transcriper_get_system_info: any = null;
-  private static transcriper_get_available_models: any = null;
-  private static transcriper_cleanup: any = null;
+  private static transcriper_initialize: TranscriperInitialize | null = null;
+  private static transcriper_is_ready: TranscriperIsReady | null = null;
+  private static transcriper_process_audio_file: TranscriperProcessAudioFile | null = null;
+  private static transcriper_process_audio_buffer: TranscriperProcessAudioBuffer | null = null;
+  private static transcriper_get_system_info: TranscriperGetSystemInfo | null = null;
+  private static transcriper_get_available_models: TranscriperGetAvailableModels | null = null;
+  private static transcriper_cleanup: TranscriperCleanup | null = null;
 
   private static loadLibrary(): void {
     if (SwiftNativeBridge.lib) return;
@@ -67,7 +67,7 @@ export class SwiftNativeBridge {
         libPath = possiblePath;
         console.log(`   ✅ Found library at: ${possiblePath}`);
         break;
-      } catch (e) {
+      } catch {
         // Library not found at this path, try next
         console.log(`   ❌ Not found at: ${possiblePath}`);
         SwiftNativeBridge.lib = null;
@@ -109,7 +109,7 @@ export class SwiftNativeBridge {
       };
     }
 
-    const { command, parseResult, successPattern } = options;
+    const { command } = options;
     const [commandName, ...args] = command;
 
     try {
@@ -135,7 +135,7 @@ export class SwiftNativeBridge {
     } catch (error) {
       return {
         success: false,
-        error: error.message
+        error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
   }
@@ -327,7 +327,7 @@ export class SwiftNativeBridge {
   }
 
   // Maintain compatibility with SwiftProcessRunner interface
-  static extractJsonFromOutput(output: string): any {
+  static extractJsonFromOutput(output: string): unknown {
     const lines = output.split('\n');
     const jsonStartIndex = lines.findIndex(line => line.trim().startsWith('{'));
 

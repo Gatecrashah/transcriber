@@ -1,5 +1,4 @@
 import { TranscriptionResult } from '../types/transcription';
-import type { SpeakerSegment } from '../types/transcription';
 import { SwiftNativeBridge as SwiftProcessRunner } from '../utils/swiftNativeBridge';
 import { mapLanguageCode } from '../constants/languageMappings';
 

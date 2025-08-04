@@ -66,7 +66,7 @@ class AudioCaptureApp {
     private func startSystemRecording() {
         print("Starting system audio capture using macOS 14.4+ APIs...")
 
-        if audioCapture.startSystemAudioCaptureNew() {
+        if audioCapture.startSystemAudioRecording() {
             print("System audio capture started successfully")
             runRecordingLoop()
         } else {
