@@ -4,569 +4,122 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Transcriper** is a sophisticated Electron-based transcription application that captures system audio and provides real-time AI-powered transcription using whisper.cpp. Built with TypeScript, React, and native Swift components for optimal macOS performance.
+**Transcriper** is an Electron-based meeting-notes app for macOS. It captures system + microphone audio in the renderer, transcribes it locally with **WhisperKit**, performs speaker diarization with **FluidAudio**, and stores notes (with attached transcriptions) in `localStorage`. The heavy lifting runs in a native Swift dynamic library loaded into Electron's main process via the **koffi** FFI.
 
-### ✅ Current Status (v1.9 - System Audio Capture Fully Restored)
-- **Dual-Stream Audio Capture**: Simultaneous system audio + microphone recording
-- **Advanced Speaker Diarization**: Individual speaker identification using tinydiarize
-- **Voice Activity Detection (VAD)**: Performance optimization with quality filtering
-- **Local AI Transcription**: whisper.cpp with Apple Silicon GPU acceleration  
-- **Intelligent Text Formatting**: Advanced post-processing for readable transcripts
-- **Note Management System**: Local storage with CRUD operations and proper transcription linking
-- **Modern React UI**: Responsive interface with chat-bubble transcription panel
-- **Audio Format Optimization**: Automatic 16kHz resampling for Whisper compatibility
-- **Comprehensive Testing**: Jest framework with React Testing Library and extensive test coverage
-- **Type Safety**: Unified TypeScript definitions with strict compilation
+Built with TypeScript, React 19, and Swift. All transcription is local — no audio leaves the machine.
 
-## Key Architecture
+> ⚠️ **Docs vs. reality:** Earlier versions of this file described a whisper.cpp + tinydiarize pipeline. That stack no longer exists. The current implementation is WhisperKit + FluidAudio via a Swift FFI dylib. If you find references to `whisper.cpp`, `tinydiarize`, `transcriptionManager.ts`, `useAudioRecording.ts`, or LLM enhancement, they are stale.
 
-### Core Components
-- **Main Process**: `src/index.ts` - Electron main process with security configurations
-- **Renderer Process**: `src/renderer-react.tsx` - React application entry point
-- **Preload Script**: `src/preload.ts` - Secure IPC bridge with contextIsolation
-- **Swift Audio Capture**: `src/native/swift/` - Native macOS audio capture utility
-- **Whisper Integration**: `src/native/whisper/whisper.cpp/` - Local AI transcription engine
+## Architecture
 
-### Audio Processing Pipeline
-1. **Dual-Stream Audio Capture** (`src/hooks/useAudioRecording.ts`)
-   - Simultaneous getDisplayMedia() + getUserMedia() capture
-   - Synchronized MediaRecorder instances for system audio and microphone
-   - Real-time audio level monitoring with Web Audio API AnalyserNodes
-   - Automatic format conversion and 48kHz → 16kHz resampling
+### Process / data flow
 
-2. **Voice Activity Detection** (`src/main/transcription/transcriptionManager.ts`)
-   - Pre-transcription VAD using whisper.cpp tiny model
-   - Quality-based confidence scoring and silence detection
-   - Hallucination pattern recognition and filtering
-   - Performance optimization by skipping silent segments
+```
+Renderer (React)                    Main process (Node)              Swift dylib (FFI)
+────────────────                    ───────────────────              ─────────────────
+useRecording                                                         libTranscriperNative.dylib
+  getDisplayMedia (system)
+  getUserMedia (microphone)
+  MediaRecorder → WebM
+  convertWebMToWav → 16kHz WAV
+        │
+        │ electronAPI.audio.processDirectly(arrayBuffer)
+        ▼
+                                    audioIPC: 'audio:processDirectly'
+                                      parse WAV header → Float32Array
+                                      TranscriptionManager.processAudioBuffer
+                                        nativeAudioProcessor.processAudioBuffer
+                                          SwiftNativeBridge (koffi)  ──────────►  transcriper_process_audio_buffer
+                                                                                    SwiftAudioBridge
+                                                                                      UnifiedAudioProcessor
+                                                                                        FluidAudio (VAD + diarization)
+                                                                                        WhisperKit (transcription)
+                                          ◄──────────────────────────────────────  JSON result
+                                          convertSwiftResultToTranscriptionResult
+        ◄─────────────────────────────  TranscriptionResult { text, speakers[] }
+  onTranscriptionComplete
+  addTranscription → note in localStorage
+```
 
-3. **Advanced Speaker Diarization** (`src/main/transcription/transcriptionManager.ts`)
-   - Tinydiarize model integration for mono audio speaker separation
-   - [SPEAKER_TURN] marker parsing for speaker change detection
-   - Individual speaker identification (Speaker A, B, C, etc.) - [not implemented]
-   - Robust fallback mechanisms with enhanced error handling
+### Key files
 
-4. **AI Transcription Engine** (`src/main/transcription/transcriptionManager.ts`)
-   - whisper.cpp integration with model validation
-   - Apple Silicon Metal GPU acceleration
-   - Multiple model support (tiny, base, small, medium, large-v3, tinydiarize)
-   - Automatic model downloading and integrity validation
+**Electron / main process**
+- `src/index.ts` — Main process entry. Creates the window, sets `setDisplayMediaRequestHandler({ audio: 'loopback' })` (required for system-audio capture), wires up IPC.
+- `src/preload.ts` — `contextBridge` exposing `window.electronAPI.audio` and `window.electronAPI.transcription`.
+- `src/main/ipc/audioIPC.ts` — `audio:processDirectly` (the active path), plus `getDesktopSources`, `initialize`, and a deprecated `saveAudioFile` stub.
+- `src/main/ipc/transcriptionIPC.ts` — `TranscriptionIPC` class; owns the `TranscriptionManager` and registers `transcription:*` handlers. (Most are currently unused by the renderer — see "Known issues".)
+- `src/main/transcription/transcriptionManagerSwift.ts` — `TranscriptionManager`; thin orchestration layer over `nativeAudioProcessor`.
 
-### State Management
-- **Audio Recording**: `src/hooks/useAudioRecording.ts` - Recording state and controls
-- **Transcription**: `src/hooks/useTranscription.ts` - AI processing and results
-- **Note Management**: `src/hooks/useNoteManagement.ts` - Local storage operations
+**Native bridge (TS → Swift)**
+- `src/native/nativeAudioProcessor.ts` — `NativeAudioProcessor` singleton. Calls the Swift bridge and maps raw Swift JSON → `TranscriptionResult` (maps `speaker_0` → `Speaker A`, clamps confidence, etc.).
+- `src/utils/swiftNativeBridge.ts` — `SwiftNativeBridge`. Loads the dylib with koffi and declares the C function signatures.
+- `src/types/koffi.ts` — Koffi type stubs. ⚠️ These signatures are **out of sync** with the real C functions (see "Known issues").
+
+**Swift library** (`src/native/swift/`, SwiftPM package `TranscriperNative`)
+- `Native/TranscriperNative.swift` — `@_cdecl` C-ABI entry points (`transcriper_initialize`, `transcriper_process_audio_buffer`, …).
+- `Core/SwiftAudioBridge.swift` — `@objc` bridge; synchronous wrappers (via `DispatchSemaphore`) around the async processor.
+- `Core/UnifiedAudioProcessor.swift` — Orchestrates VAD → diarization → transcription and merges results.
+- `Core/WhisperKitManager.swift` — WhisperKit wrapper. Default model `base`; models auto-download on first run.
+- `Core/FluidAudioManager.swift` — FluidAudio VAD + diarization, with an energy-based VAD fallback.
+- `Core/AudioCapture.swift` + `main.swift` — A standalone `audio-capture` executable target. **Currently orphaned** — capture happens in the browser now. Kept in the SwiftPM package but not used by the app.
+
+**React UI**
+- `src/renderer-react.tsx` — React entry point.
+- `src/components/App.tsx` — Top-level layout; wires `useRecording`, `useTranscriptionSystem`, `useNoteManagement`.
+- `src/components/{Homepage,NotepadEditor,TranscriptionPanel,AudioVisualizer,ErrorBoundary}.tsx`
+- `src/hooks/useRecording.ts` — Dual-stream capture, WebM→WAV conversion, dedup/merge of speaker segments, triggers transcription.
+- `src/hooks/useTranscriptionSystem.ts` — One-time init + installation check on mount.
+- `src/hooks/useNoteManagement.ts` — CRUD over notes in `localStorage` (key `transcriper-notes`), with Date (de)serialization.
+
+**Types**
+- `src/types/{audio,transcription,notes,koffi}.ts`
 
 ## Development Commands
 
-- `npm start` - Start the application in development mode with hot reload
-- `npm run lint` - Run ESLint on TypeScript files  
-- `npm run package` - Package the application for distribution
-- `npm run make` - Create distributable installers for the current platform
-- `npm run publish` - Publish the application
+- `npm start` — Run in dev with hot reload (Electron Forge + Webpack).
+- `npm run lint` — ESLint over `.ts`/`.tsx`.
+- `npm test` / `npm run test:watch` / `npm run test:coverage` — Jest + React Testing Library.
+- `npm run package` / `npm run make` / `npm run publish` — Package / build installers / publish.
 
-### Build Requirements
-- **macOS**: Required for Swift audio capture compilation
-- **Node.js**: 18+ for Electron compatibility
-- **Xcode**: For Swift compilation
-- **CMake**: For whisper.cpp compilation
-- **Tinydiarize Model**: 465MB model automatically downloaded via `download-tinydiarize-model.sh`
+### Building the Swift library
 
-### Speaker Diarization Setup
-To enable advanced speaker identification:
+The app loads `libTranscriperNative.dylib`. A prebuilt copy is committed at `src/native/swift/libTranscriperNative.dylib`, and `swift build` outputs to `src/native/swift/.build/arm64-apple-macosx/release/`. To rebuild:
+
 ```bash
-cd src/native/whisper/whisper.cpp/models
-./download-tinydiarize-model.sh
-```
-This downloads the small.en-tdrz model (465MB) for mono audio speaker separation.
-
-## Build Configuration
-
-- **Electron Forge**: WebpackPlugin for bundling and distribution
-- **TypeScript**: Strict compilation with ES2020 target
-- **Security**: ASAR encryption, context isolation, node integration disabled
-- **Multi-platform**: Support for macOS (primary), Windows, Linux
-- **Native Dependencies**: Swift utilities, whisper.cpp C++ library
-
-## Security Configuration
-
-The application has several security features enabled via Electron Fuses:
-- ASAR integrity validation
-- Cookie encryption
-- Node.js integration disabled in renderer
-- App only loads from ASAR in production
-- Context isolation enabled for IPC security
-- Secure permission handling for media access
-
----
-
-# 🚀 Comprehensive Improvement Plan for Transcriper
-
-## Phase 1: Critical Security & ESLint Fixes (Week 1)
-**Priority: CRITICAL - Must be done first**
-
-### 1.1 Fix Security Vulnerabilities (Day 1)
-- [ ] **brace-expansion ReDoS** (Low severity): Run `npm audit fix` to update
-- [ ] **webpack-dev-server vulnerabilities** (Moderate): Requires @electron-forge/plugin-webpack downgrade (breaking change)
-  - Decision needed: Accept breaking change or find alternative webpack configuration
-
-### 1.2 Fix Critical ESLint Errors (Day 1-2)
-- [ ] **App.tsx:92** - Remove unnecessary escape character in regex: `[.\-[\]]+` → `[.[\]-]+`
-- [ ] **index.ts:6** - Replace `require('electron-squirrel-startup')` with proper import
-- [ ] **transcriptionManager.ts:968** - Replace `require('child_process')` with import at top
-
-### 1.3 Extract Text Formatting Logic (Day 2-3)
-- [ ] Create `src/utils/textFormatter.ts` with:
-  - `formatSpeakerTranscribedText()` function (140+ lines from App.tsx:18-160)
-  - `formatTranscribedText()` function with comprehensive regex patterns
-  - Proper TypeScript interfaces for formatting options
-  - Unit tests for all formatting functions
-
-## Phase 2: TypeScript & Type Safety (Week 2)
-**Priority: HIGH - Foundation for maintainability**
-
-### 2.1 Remove All `any` Types (Day 1-3)
-- [ ] **preload.ts**: Replace 3 `any` types with proper interfaces
-- [ ] **transcriptionManager.ts**: Replace 4 `any` types in JSON parsing
-- [ ] **useAudioRecording.ts**: Replace `any` type with proper audio interface
-- [ ] **Homepage.tsx**: Define proper type for note objects
-
-### 2.2 Add Missing Interfaces (Day 3-4)
-- [ ] Create `src/types/audio.ts` for audio-related TypeScript interfaces
-- [ ] Create `src/types/transcription.ts` for transcription TypeScript interfaces
-- [ ] Add runtime type validation using zod or similar library
-
-### 2.3 Clean Up Unused Variables (Day 4-5)
-- [ ] Remove 6 unused variables across multiple files
-- [ ] Fix import naming issues in NotepadEditor.tsx
-
-## Phase 3: Architecture & Performance (Week 3-4)
-**Priority: MEDIUM - Long-term maintainability**
-
-### 3.1 Modularize TranscriptionManager (Week 3)
-- [ ] Split 1046-line file into focused modules:
-  - `src/main/transcription/core/` - Core transcription logic
-  - `src/main/transcription/speaker/` - Speaker diarization
-  - `src/main/transcription/audio/` - Audio analysis & VAD
-  - `src/main/transcription/formatters/` - Output formatting
-
-### 3.2 Performance Optimizations (Week 4)
-- [ ] Implement caching for model validation results
-- [ ] Optimize regex-heavy text processing functions
-- [ ] Add streaming support for large audio files
-- [ ] Memory usage monitoring and cleanup
-
-### 3.3 Error Handling & Resilience (Week 4)
-- [ ] Add React Error Boundaries for component failures
-- [ ] Implement comprehensive IPC error handling
-- [ ] Add retry mechanisms for failed transcriptions
-- [ ] Graceful degradation when models unavailable
-
-## Phase 4: Testing & Quality Assurance (Week 5-6)
-**Priority: HIGH - Essential for reliability**
-
-### 4.1 Unit Testing Framework (Week 5)
-- [ ] Set up Jest with TypeScript support
-- [ ] Create mock audio devices for testing
-- [ ] Test text formatting functions (extracted in Phase 1)
-- [ ] Test transcription pipeline components
-
-### 4.2 Integration Testing (Week 6)
-- [ ] End-to-end audio capture and transcription tests
-- [ ] UI component testing with React Testing Library
-- [ ] Error scenario testing
-- [ ] Cross-platform compatibility verification
-
-## Phase 5: Dependency Updates (Week 7)
-**Priority: MEDIUM - After core stability achieved**
-
-### 5.1 Major Version Updates
-- [ ] **TypeScript**: 4.5.4 → 5.8.3 (requires migration planning)
-- [ ] **ESLint**: 5.62.0 → 8.34.0 (configuration updates needed)
-- [ ] **React Types**: Minor updates safe to apply
-
-### 5.2 Development Tooling
-- [ ] Update webpack and build tools
-- [ ] Ensure compatibility with new TypeScript version
-- [ ] Update development scripts
-
-## Risk Assessment & Mitigation
-
-### High Risk Items
-1. **TypeScript 5.x migration** - May break existing code
-   - Mitigation: Create feature branch, test thoroughly
-2. **Webpack dev server fix** - Breaking change required
-   - Mitigation: Evaluate if development features are needed
-
-### Success Metrics
-- [ ] 0 ESLint errors and warnings
-- [ ] 0 security vulnerabilities
-- [ ] 100% TypeScript strict mode compliance
-- [ ] <200ms audio processing startup time
-- [ ] Comprehensive test coverage >80%
-
-**Estimated Timeline: 7 weeks total**
-- **Week 1**: Critical fixes (security + ESLint)
-- **Week 2**: Type safety improvements  
-- **Week 3-4**: Architecture refactoring
-- **Week 5-6**: Testing implementation
-- **Week 7**: Dependency updates
-
-## ✅ Phase 6: System Audio Capture & Speaker Diarization (RESTORED)
-**Status: ✅ COMPLETED and RESTORED in v1.9**
-
-### 🔧 Critical System Audio Capture Fix (v1.9)
-After Phase 6 completion, system audio capture with headphones stopped working due to missing Electron configuration. **Issue fully resolved:**
-
-- [x] **Root Cause Identified**: Missing `setDisplayMediaRequestHandler` with `audio: 'loopback'` configuration
-- [x] **Electron Configuration Restored**: Added proper display media handler for system audio capture
-- [x] **getDisplayMedia() API Fixed**: Now successfully captures system audio with headphones (AirPods, etc.)
-- [x] **VAD Issues Resolved**: Disabled overly aggressive Voice Activity Detection that was blocking real speech
-- [x] **Tinydiarize Model Verified**: Confirmed `ggml-small.en-tdrz.bin` (487MB) properly configured for speaker separation
-- [x] **Full Dual-Stream Working**: Both system audio + microphone capture working simultaneously
-- [x] **Speaker Identification**: Successfully detecting multiple speakers with `[SPEAKER_TURN]` markers
-
-### 🔧 Technical Details of the Fix
-**Files Modified:**
-- `src/index.ts`: Restored `setDisplayMediaRequestHandler` with `audio: 'loopback'` configuration
-- `src/hooks/useAudioRecording.ts`: Updated to use Electron 36.4.0 compatible approach
-- `src/main/transcription/audio/analyzer.ts`: Temporarily disabled aggressive VAD
-- `package.json`: Upgraded Electron from 25.9.8 to 36.4.0
-
-**Key Configuration Restored:**
-```typescript
-mainWindow.webContents.session.setDisplayMediaRequestHandler((request, callback) => {
-  callback({ 
-    video: mainWindow.webContents.mainFrame, 
-    audio: 'loopback' 
-  });
-});
+cd src/native/swift
+swift build -c release
 ```
 
-**Result:** System audio now captures successfully with `getDisplayMedia({ audio: true, video: false })` even with headphones connected.
+WhisperKit and FluidAudio are statically linked into the dylib; CoreML models are downloaded by WhisperKit at first run.
 
-### ✅ 6.1 Fix Transcription-Note Association Bug (COMPLETED)
-- [x] **Investigated Current Issue**: Fixed transcriptions appearing in all notes instead of specific meetings
-- [x] **Implemented Note-Specific Transcription Storage**
-  - [x] Linked transcriptions to specific note IDs in data model
-  - [x] Updated data model to store transcription-note associations properly
-  - [x] Modified transcription panel to only show current note's transcriptions
-- [x] **Updated Storage Architecture**
-  - [x] Implemented separate transcription storage per note
-  - [x] Added transcription metadata (note ID, timestamp, session info)
-  - [x] Added transcription cleanup methods for when notes are deleted
+### Requirements
+- **macOS 14+** (Swift code is gated on `@available(macOS 14.0, *)`) on Apple Silicon (`arm64`).
+- **Node.js 18+**, **Xcode** (Swift toolchain) for building the native library.
 
-### ✅ 6.2 Enhanced Note Management & Testing (COMPLETED)
-- [x] **Chat-Bubble UI for Speaker Diarization**
-  - [x] Implemented Granola-style chat bubbles for speaker-identified transcriptions
-  - [x] Added visual distinction between different speakers
-  - [x] Created fallback to traditional segments for non-speaker content
-- [x] **Comprehensive Testing Framework**
-  - [x] Set up Jest with TypeScript support and React Testing Library
-  - [x] Created extensive test suites for note management and transcription linking
-  - [x] Added tests for localStorage serialization/deserialization
-  - [x] Implemented test coverage for critical functionality
-- [x] **TypeScript Compilation Fixes**
-  - [x] Unified TranscriptionOptions interfaces across codebase
-  - [x] Fixed model type assertions and removed duplicate interfaces
-  - [x] Removed unsupported API properties while maintaining extensibility
-  - [x] Cleaned up unused props and linting warnings
+## Build / Security Configuration
 
-## Phase 7: LLM-Based Meeting Enhancement System (Week 9-12)
-**Priority: MEDIUM - Advanced Feature - PARTIALLY STARTED (LLM files present but blocked by dependency issues)**
+- **Electron Forge** + Webpack plugin; `transpileOnly` ts-loader (⚠️ type errors do **not** fail the build — see below).
+- `AutoUnpackNativesPlugin` unpacks native `.node` modules (e.g. koffi) from the ASAR.
+- Electron Fuses: cookie encryption, ASAR integrity validation, `OnlyLoadAppFromAsar`, Node CLI inspect/options disabled, RunAsNode disabled.
+- Renderer: `contextIsolation: true`, `nodeIntegration: false`. (`experimentalFeatures: true` is currently set and could likely be removed.)
+- Permission handler grants `media` and `display-capture`; everything else is denied.
 
-### 🚧 Current Status
-Phase 7 work was started but encountered version compatibility issues with llama.cpp dependencies. LLM-related files are present in the codebase but not yet functional. This phase should be resumed after core stability is achieved.
+## Known Issues / Tech Debt
 
-**LLM Files Present (Uncommitted):**
-- `src/hooks/useLLM.ts` - LLM integration hook
-- `src/hooks/useNoteEnhancement.ts` - Note enhancement logic
-- `src/main/ipc/llmIPC.ts` - LLM IPC handlers  
-- `src/main/ipc/llmIPCStub.ts` - Stub handlers (currently active)
-- `src/main/llm/` - LLM core functionality
-- `src/components/AIEnhancementToggle.tsx` - UI components
-- `src/components/EnhancedNoteDisplay.tsx` - Enhanced note display
-- `src/types/llm.ts` - LLM type definitions
+These are real and worth knowing before you touch the code:
 
-These files represent partial Phase 7 implementation and should be completed once dependency issues are resolved.
+1. **Packaged builds don't ship the dylib.** `forge.config.ts` has no `extraResource`/copy step, and `swiftNativeBridge.ts` resolves the library relative to `process.cwd()` / `__dirname`. Works under `npm start` (cwd = repo); a `npm run make` build cannot load the library and every transcription fails. Fix: bundle the dylib (e.g. `extraResource`) and resolve via `process.resourcesPath`.
+2. **FFI runs synchronously on the main thread.** koffi `lib.func(...)` calls are blocking and the Swift side blocks on a `DispatchSemaphore`, so the main process is frozen for the full transcription duration. Prefer koffi `.async()` or a `utilityProcess`/worker.
+3. **`transcribeFile` path is broken.** `nativeAudioProcessor.processAudioFile` passes a `parseResult` callback that `swiftNativeBridge.runCommand` ignores, so it returns raw Swift JSON (`segments`/`speakerId`) instead of a converted `TranscriptionResult` (`speakers`/`speaker`). Latent — the renderer only uses the `processAudioBuffer` path, which converts correctly.
+4. **Type checking is effectively off.** `ts-loader` runs with `transpileOnly: true` and ForkTsChecker is commented out in `webpack.plugins.ts`. `npx tsc --noEmit` currently reports ~16 errors. The worst offender is `src/types/koffi.ts`, whose signatures don't match the real C functions (the runtime call sites in `swiftNativeBridge.ts` are correct).
+5. **`preload.ts`'s declared `Window.electronAPI` is out of sync** with what's actually exposed (e.g. declares `audio.getDevices/startRecording/...` that don't exist; omits `requestSystemAudioPermission` that does).
+6. **Dead code:** the `audio-capture` Swift executable target, several `transcription:*` IPC handlers + their preload wrappers, `transcriptionManagerSwift.transcribeDualStreams` (the renderer does its own merge), and the deprecated `saveAudioFile` stubs.
+7. **Confidence is meaningless.** WhisperKit's `avgLogprob` (negative) is stored as `confidence`, then clamped to `[0,1]` → effectively `0`.
 
-### 7.1 LLM Integration Architecture (Week 9)
-- [ ] **Qwen 2-7B Q4_K_M Model Integration**
-  - Research local deployment options (llama.cpp, Ollama, etc.)
-  - Set up model loading and inference pipeline
-  - Implement memory-efficient model management
-  - Add model download and validation system
+## Conventions
 
-### 7.2 Prompt Template System (Week 10)
-- [ ] **Custom Prompt Template Engine**
-  - Create template system for different meeting types
-  - Support variable injection (notes, transcription, meeting type)
-  - Template editor UI for advanced users
-  - Default templates for common meeting scenarios
-- [ ] **Context Management**
-  - Combine user notes + transcription + meeting type as context
-  - Implement context length management (chunking for long meetings)
-  - Smart context prioritization (recent content, key points)
-
-### 7.3 Meeting Enhancement Features (Week 11)
-- [ ] **Summarization Pipeline**
-  - Generate meeting summaries based on transcription + notes
-  - Key points extraction and highlighting
-  - Action items identification and formatting
-  - Decision tracking and outcomes summary
-- [ ] **Note Enhancement Options**
-  - Grammar and clarity improvements
-  - Professional formatting suggestions
-  - Missing information detection
-  - Follow-up recommendations
-
-### 7.4 LLM Processing UI & Controls (Week 12)
-- [ ] **Processing Interface**
-  - Progress indicators for LLM processing
-  - Cancel/abort long-running operations
-  - Batch processing for multiple notes
-  - Quality indicators for generated content
-- [ ] **Review & Edit System**
-  - Side-by-side comparison (original vs enhanced)
-  - Selective application of suggestions
-  - Undo/redo for LLM enhancements
-  - User feedback collection for model improvement
-
-### 7.5 Advanced LLM Features (Future)
-- [ ] **Meeting Type-Specific Processing**
-  - Custom prompts per meeting type
-  - Role-based analysis (participant identification)
-  - Industry-specific terminology and formatting
-- [ ] **Multi-Session Analysis**
-  - Connect related meetings over time
-  - Project/client-based context awareness
-  - Long-term relationship and decision tracking
-
-## Risk Assessment for New Features
-
-### High Risk Items
-1. **LLM Model Size & Performance** - 7B model may be too large for some systems
-   - Mitigation: Offer smaller model options
-2. **Transcription-Note Linking Migration** - No critical existing data at the moment, so no migration need.
-3. **Privacy Concerns with LLM Processing** - Sensitive meeting data
-   - Mitigation: Local-only processing
-
-### Success Metrics for New Phases
-- [ ] 100% transcription-note association accuracy
-- [ ] <30s LLM processing time for typical meetings
-- [ ] >90% user satisfaction with generated summaries
-- [ ] Zero data leakage between unrelated notes
-
-**Updated Estimated Timeline: 11 weeks remaining**
-- **Week 1-7**: Core stability and architecture (planned for future)  
-- **✅ Week 8**: Transcription-note linking fixes (COMPLETED)
-- **✅ Week 8.5**: System audio capture restoration (COMPLETED)
-- **Week 9-12**: LLM-based meeting enhancement system (BLOCKED - resume after dependency resolution)
-
----
-
-## 🎯 Legacy Roadmap: Code Quality & Stability (Priority: HIGH)
-**Timeline: 2-3 weeks**
-
-### Technical Debt Resolution
-- [ ] **Extract Text Formatting Logic** 
-  - Move complex regex patterns from `App.tsx:18-120` to `src/utils/textFormatter.ts`
-  - Create unit tests for all formatting rules
-  - Add support for different formatting styles
-
-- [ ] **Implement Comprehensive Error Handling**
-  - Create error boundary components for React
-  - Standardize IPC error handling patterns
-  - Add retry mechanisms for failed transcriptions
-  - Implement graceful degradation when models unavailable
-
-- [ ] **Enhance TypeScript Type Safety**
-  - Remove all `any` types from audio interfaces
-  - Create proper type definitions for native audio responses  
-  - Add strict typing for IPC communication
-  - Implement runtime type validation
-
-- [ ] **Memory Management Improvements**
-  - Fix audio level monitoring cleanup
-  - Implement garbage collection for old transcriptions
-  - Add memory usage monitoring and warnings
-
-### Configuration Management
-- [ ] **Centralized Configuration System**
-  - Create `src/config/` directory structure
-  - Move hard-coded paths to configuration files
-  - Add environment-specific configurations
-  - Implement configuration validation
-
-## ✅ Phase 2: Dual Audio Capture & Speaker Diarization (COMPLETED)
-**Status: ✅ COMPLETED in v1.7**
-
-### ✅ Dual-Stream Audio Capture Implementation
-- [x] **Simultaneous Audio Capture**
-  - [x] Implemented simultaneous `getDisplayMedia()` + `getUserMedia()` capture
-  - [x] Created dual MediaRecorder instances with synchronized timestamps
-  - [x] Added audio stream mixing for combined transcription output
-  - [x] Maintained separate channels for speaker identification
-  - [x] Added fallback handling when one stream fails
-  - [x] Updated UI to show both audio sources are active
-
-### ✅ Advanced Speaker Diarization Implementation
-- [x] **Tinydiarize Integration**
-  - [x] Downloaded and integrated tinydiarize model (small.en-tdrz, 465MB)
-  - [x] Implemented `--tinydiarize` flag support for mono audio diarization
-  - [x] Added [SPEAKER_TURN] marker parsing for speaker change detection
-  - [x] Created speaker labeling system (Speaker A, Speaker B, Speaker C, etc.)
-
-- [x] **Voice Activity Detection (VAD)**
-  - [x] Implemented pre-transcription VAD using whisper.cpp tiny model
-  - [x] Added quality-based confidence scoring and silence detection
-  - [x] Created hallucination pattern recognition and filtering
-  - [x] Optimized performance by skipping silent/low-quality segments
-
-- [x] **Enhanced Error Handling**
-  - [x] Added comprehensive fallback mechanisms
-  - [x] Implemented robust model validation and integrity checking
-  - [x] Created detailed diagnostic logging for troubleshooting
-  - [x] Added automatic model downloading with download-tinydiarize-model.sh
-
-### 🎯 Next Phase: Advanced Speaker Management
-- [ ] **Enhanced Speaker Features**
-  - [ ] Allow custom speaker names/labels (replace Speaker A/B/C with real names)
-  - [ ] Implement speaker voice profile learning for better consistency
-
-### Audio Quality Improvements
-- [ ] **Audio Preprocessing Pipeline**
-  - Implement noise reduction using Web Audio API
-  - Add automatic gain control for consistent levels
-  - Create audio quality indicators and warnings
-  - Implement audio compression for storage efficiency
-
-## ⚡ Phase 3: Performance & User Experience (Priority: MEDIUM)
-**Timeline: 3-4 weeks**
-
-### Performance Optimizations
-- [ ] **Streaming Audio Processing**
-  - Replace file-based processing with streaming
-  - Implement real-time transcription as audio is captured
-  - Add progressive transcription display
-  - Optimize for long recording sessions
-
-- [ ] **Background Processing System**
-  - Create transcription queue system
-  - Implement non-blocking UI during processing
-  - Add progress indicators for long transcriptions
-  - Enable concurrent transcription of multiple files
-
-- [ ] **Model and Resource Optimization**
-  - Implement model caching and preloading
-  - Add model switching without app restart
-  - Optimize whisper.cpp compilation for Apple Silicon
-  - Create model download and management system
-
-### User Experience Enhancements
-- [ ] **Advanced Recording Controls**
-  - Implement global keyboard shortcuts
-  - Add system tray integration with quick controls
-  - Create notification system for transcription completion
-  - Add one-click recording start/stop from menu bar
-
-- [ ] **Enhanced Note Management**
-  - [ ] **Search and Organization**
-    - Implement full-text search across all notes
-    - Add tags and categories for notes
-    - Create date-based filtering and sorting
-    - Add note templates and formatting options
-  
-  - [ ] **Data Management**
-    - Implement note backup and restore functionality
-    - Add multiple export formats (PDF, Word, Markdown)
-    - Create note sharing via secure links
-    - Add version history for notes
-
-## 🔒 Phase 4: Security & Data Protection (Priority: MEDIUM)
-**Timeline: 2-3 weeks**
-
-### Data Security
-- [ ] **Audio Data Protection**
-  - Implement encryption for stored audio files
-  - Add secure deletion of temporary files
-  - Create user-controlled data retention policies
-  - Add option to disable audio file storage
-
-- [ ] **Privacy Enhancements**
-  - Implement local-only processing guarantees
-  - Add privacy mode with automatic cleanup
-  - Create data export tools for user control
-  - Add opt-in analytics with privacy protection
-
-### Enhanced Security
-- [ ] **Process Isolation**
-  - Enhanced sandboxing for audio processing
-  - Secure IPC validation and sanitization
-  - Limited file system access controls
-  - Implement secure update mechanisms
-
-## 🧪 Phase 5: Testing & Quality Assurance (Priority: HIGH)
-**Timeline: 2-3 weeks**
-
-### Test Infrastructure
-- [x] **Unit Testing Framework**
-  - [x] Set up Jest configuration for comprehensive testing
-  - [x] Create mock audio devices for testing
-  - [x] Implement audio processing pipeline tests
-  - [x] Add transcription accuracy validation tests
-
-- [x] **Integration Testing**
-  - [x] UI component integration testing with React Testing Library
-  - [x] Error handling scenario testing
-  - [ ] End-to-end audio capture and transcription tests
-  - [ ] Cross-platform compatibility testing
-
-- [ ] **Performance Testing**
-  - Memory leak detection and prevention
-  - Long-running session stability tests
-  - Audio quality degradation monitoring
-  - Load testing for multiple concurrent transcriptions
-
-## 📚 Phase 8: Documentation & Polish (Priority: MEDIUM)
-**Timeline: 1-2 weeks**
-
-### User Documentation
-- [ ] **User Guides**
-  - Complete installation and setup instructions
-  - Create troubleshooting guides
-  - Add privacy and security documentation
-  - Write feature tutorials and best practices
-
-### Developer Documentation
-- [ ] **Technical Documentation**
-  - Complete API documentation for IPC interfaces
-  - Audio processing pipeline documentation
-  - Architecture overview and design decisions
-  - Contributing guidelines and development setup
-
----
-
-# 🔧 Development Guidelines
-
-## Code Standards
-- **TypeScript**: Strict mode enabled, no `any` types allowed
-- **React**: Functional components with hooks, proper error boundaries
-- **Security**: All IPC communication must be validated and sanitized
-- **Performance**: Audio processing should not block UI thread
-- **Testing**: All new features require corresponding tests
-
-## Audio Processing Principles
-- **16kHz Compatibility**: Ensure all audio is resampled for Whisper
-- **Dual-Stream Architecture**: Maintain separate system and microphone channels
-- **Speaker Diarization**: Use tinydiarize for mono audio speaker separation
-- **Voice Activity Detection**: Pre-filter audio to optimize transcription performance
-- **Quality Preservation**: Maintain audio fidelity during processing
-- **Memory Efficiency**: Stream large audio files, avoid loading entirely
-- **Error Recovery**: Graceful handling of audio device failures
-
-## Privacy by Design
-- **Local Processing**: All transcription happens locally by default
-- **User Control**: Clear options for data retention and deletion
-- **Transparency**: Users must understand what data is stored where
-- **Minimal Data**: Only store what's necessary for functionality
+- **TypeScript** strict mode is enabled in `tsconfig.json` even though the build doesn't enforce it — keep new code clean and avoid `any`.
+- **React** functional components + hooks; wrap risky subtrees in `ErrorBoundary`.
+- **Audio** must reach Whisper as 16kHz mono — `convertWebMToWav` handles resampling. Keep system and microphone channels separate so diarization/labelling works.
+- **Privacy by design** — all processing is local; don't add network calls for audio or transcripts.
+- **IPC** — validate/serialize across the boundary (e.g. `Float32Array` is passed as a plain array).
