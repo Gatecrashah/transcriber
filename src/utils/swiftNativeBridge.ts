@@ -41,17 +41,23 @@ export class SwiftNativeBridge {
   private static loadLibrary(): void {
     if (SwiftNativeBridge.lib) return;
 
+    const dylibName = 'libTranscriperNative.dylib';
+
     // Try multiple paths to find the Swift library
     const possiblePaths = [
-      // Development path
-      path.resolve(process.cwd(), 'src/native/swift/.build/arm64-apple-macosx/release/libTranscriperNative.dylib'),
-      // Alternative development path
-      path.resolve(process.cwd(), 'src/native/swift/libTranscriperNative.dylib'),
-      // Production path (might be different)
-      path.resolve(__dirname, '../../native/swift/.build/arm64-apple-macosx/release/libTranscriperNative.dylib'),
-      // Alternative production path
-      path.resolve(__dirname, '../../native/swift/libTranscriperNative.dylib'),
-    ];
+      // Packaged app: shipped via forge `extraResource` into Contents/Resources/.
+      // `process.resourcesPath` only points at the app bundle when packaged; in dev
+      // it points at Electron's own Resources (where the file is absent), so the
+      // loop below simply falls through to the development paths.
+      process.resourcesPath ? path.join(process.resourcesPath, dylibName) : '',
+      // Development path (output of `swift build -c release`)
+      path.resolve(process.cwd(), `src/native/swift/.build/arm64-apple-macosx/release/${dylibName}`),
+      // Development path (committed prebuilt copy)
+      path.resolve(process.cwd(), `src/native/swift/${dylibName}`),
+      // Fallback relative to the bundled main process file
+      path.resolve(__dirname, `../../native/swift/.build/arm64-apple-macosx/release/${dylibName}`),
+      path.resolve(__dirname, `../../native/swift/${dylibName}`),
+    ].filter(Boolean);
     
     console.log('🔍 Searching for Swift native library...');
     console.log('   Current working directory:', process.cwd());

@@ -14,6 +14,9 @@ import { rendererConfig } from './webpack.renderer.config';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    // Ship the self-contained Swift native library outside the ASAR so it can be
+    // dlopen'd at runtime. Lands in Contents/Resources/ (process.resourcesPath).
+    extraResource: ['./src/native/swift/libTranscriperNative.dylib'],
   },
   rebuildConfig: {},
   makers: [new MakerSquirrel({}), new MakerZIP({}, ['darwin']), new MakerRpm({}), new MakerDeb({})],
