@@ -146,7 +146,7 @@ export const TranscriptionPanel: React.FC<TranscriptionPanelProps> = ({
       <div className="panel-header">
         <div className="panel-title">
           <FileText size={18} />
-          <span>Transcriptions</span>
+          <span>Transcript</span>
         </div>
         <div className="panel-actions">
           {selectedSegments.size > 0 && (
@@ -175,8 +175,8 @@ export const TranscriptionPanel: React.FC<TranscriptionPanelProps> = ({
         {segments.length === 0 ? (
           <div className="empty-state">
             <FileText size={48} />
-            <h3>No transcriptions yet</h3>
-            <p>Start recording to see your transcriptions here</p>
+            <h3>No transcript yet</h3>
+            <p>Record a meeting and the transcript appears here, speaker by speaker.</p>
           </div>
         ) : (
           <div className="segments-list">

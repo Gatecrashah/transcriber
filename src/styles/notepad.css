@@ -1,189 +1,132 @@
-/* Notepad Editor Styles */
+/* ============================================================================
+   Notepad editor — the writing surface
+   ========================================================================== */
+
 .notepad-editor {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #29232f;
 }
 
-/* Editor Content */
 .editor-content-wrapper {
   flex: 1;
   overflow: auto;
-  padding: 0;
 }
 
 .notepad-editor-content {
-  max-width: none;
-  padding: 40px 32px 120px; /* Extra bottom padding for floating button */
-  min-height: calc(100% - 40px);
+  max-width: 720px;
+  padding: 44px 36px 140px;
+  min-height: calc(100% - 44px);
   outline: none;
-  line-height: 1.4;
-  font-size: 16px;
-  color: #ebe6ef;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Inter', sans-serif;
+  font-family: var(--sans);
+  font-size: var(--t-body);
+  line-height: 1.75;
+  letter-spacing: 0.005em;
+  color: var(--ink);
 }
 
-/* Placeholder styling */
+/* Placeholder */
 .notepad-editor-content.is-editor-empty::before {
   content: attr(data-placeholder);
-  color: #9ca3af;
+  color: var(--ink-faint);
   pointer-events: none;
   white-space: pre-line;
   height: 0;
   float: left;
 }
 
-/* Typography */
+/* Headings — serif (titles only) */
 .notepad-editor-content h1 {
-  font-size: 32px;
-  font-weight: 700;
-  line-height: 1.2;
-  margin: 32px 0 16px;
-  color: #ebe6ef;
-  letter-spacing: -0.025em;
+  font-family: var(--serif);
+  font-optical-sizing: auto;
+  font-size: var(--t-h1);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.018em;
+  margin: 36px 0 14px;
+  color: var(--ink);
+  text-wrap: balance;
 }
-
-.notepad-editor-content h1:first-child {
-  margin-top: 0;
-}
-
+.notepad-editor-content h1:first-child { margin-top: 0; }
 .notepad-editor-content h2 {
-  font-size: 24px;
+  font-family: var(--serif);
+  font-optical-sizing: auto;
+  font-size: var(--t-h2);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  margin: 30px 0 12px;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.notepad-editor-content h3 {
+  font-family: var(--serif);
+  font-optical-sizing: auto;
+  font-size: var(--t-h3);
   font-weight: 600;
   line-height: 1.3;
-  margin: 24px 0 12px;
-  color: #ebe6ef;
-  letter-spacing: -0.02em;
+  margin: 24px 0 8px;
+  color: var(--ink);
 }
 
-.notepad-editor-content h3 {
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 1.4;
-  margin: 20px 0 8px;
-  color: #ebe6ef;
-}
-
+/* Body */
 .notepad-editor-content p {
-  margin: 8px 0;
-  line-height: 1.4;
-  color: #ebe6ef;
+  margin: 10px 0;
+  line-height: 1.75;
+  color: var(--ink);
+  text-wrap: pretty;
 }
+.notepad-editor-content p:first-child { margin-top: 0; }
+.notepad-editor-content p:last-child { margin-bottom: 0; }
 
-.notepad-editor-content p:first-child {
-  margin-top: 0;
-}
-
-.notepad-editor-content p:last-child {
-  margin-bottom: 0;
-}
-
-/* Lists */
+/* Lists — amber markers */
 .notepad-editor-content ul,
-.notepad-editor-content ol {
-  margin: 16px 0;
-  padding-left: 24px;
-}
+.notepad-editor-content ol { margin: 14px 0; padding-left: 26px; }
+.notepad-editor-content li { margin: 5px 0; line-height: 1.7; color: var(--ink); }
+.notepad-editor-content ul li { list-style-type: disc; }
+.notepad-editor-content ol li { list-style-type: decimal; }
+.notepad-editor-content li::marker { color: var(--amber); }
 
-.notepad-editor-content ul li,
-.notepad-editor-content ol li {
-  margin: 3px 0;
-  line-height: 1.4;
-  color: #ebe6ef;
-}
+/* Inline */
+.notepad-editor-content strong { font-weight: 700; color: var(--ink); }
+.notepad-editor-content em { font-style: italic; }
+.notepad-editor-content s { text-decoration: line-through; color: var(--ink-faint); }
 
-.notepad-editor-content ul li {
-  list-style-type: disc;
-}
-
-.notepad-editor-content ol li {
-  list-style-type: decimal;
-}
-
-.notepad-editor-content ul li::marker {
-  color: #ff8c42;
-}
-
-.notepad-editor-content ol li::marker {
-  color: #ff8c42;
-}
-
-/* Text Formatting */
-.notepad-editor-content strong {
-  font-weight: 600;
-  color: #ebe6ef;
-}
-
-.notepad-editor-content em {
-  font-style: italic;
-  color: #ebe6ef;
-}
-
-.notepad-editor-content s {
-  text-decoration: line-through;
-  color: #9ca3af;
-}
-
-/* Code (if using code extension later) */
 .notepad-editor-content code {
-  background: #3a3443;
-  color: #ff8c42;
+  font-family: var(--mono);
+  font-size: 0.875em;
+  background: var(--surface-1);
+  color: var(--amber);
   padding: 2px 6px;
-  border-radius: 4px;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-  font-size: 14px;
+  border-radius: 5px;
 }
-
 .notepad-editor-content pre {
-  background: #2a1f30;
-  border: 1px solid #3a3443;
-  border-radius: 8px;
-  padding: 16px;
-  margin: 16px 0;
+  background: var(--deep);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 16px 18px;
+  margin: 18px 0;
   overflow-x: auto;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #ebe6ef;
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--ink);
 }
+.notepad-editor-content pre code { background: none; color: inherit; padding: 0; }
 
-/* Selection */
-.notepad-editor-content ::selection {
-  background: rgba(255, 140, 66, 0.3);
-}
+.notepad-editor-content ::selection { background: rgba(255, 140, 66, 0.28); }
 
-.notepad-editor-content::-moz-selection {
-  background: rgba(255, 140, 66, 0.3);
-}
-
-/* Focus state */
-.notepad-editor-content:focus {
-  outline: none;
-}
-
-/* Scrollbar styling for webkit browsers */
-.editor-content-wrapper::-webkit-scrollbar {
-  width: 8px;
-}
-
-.editor-content-wrapper::-webkit-scrollbar-track {
-  background: transparent;
-}
-
+/* Scrollbar */
+.editor-content-wrapper::-webkit-scrollbar { width: 10px; }
+.editor-content-wrapper::-webkit-scrollbar-track { background: transparent; }
 .editor-content-wrapper::-webkit-scrollbar-thumb {
-  background: #3a3443;
-  border-radius: 4px;
+  background: var(--line-2);
+  border-radius: var(--r-pill);
+  border: 3px solid transparent;
+  background-clip: padding-box;
 }
+.editor-content-wrapper::-webkit-scrollbar-thumb:hover { background: var(--ink-faint); background-clip: padding-box; }
 
-.editor-content-wrapper::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .notepad-editor-content {
-    padding: 24px 20px 100px;
-    font-size: 16px;
-  }
+@media (max-width: 860px) {
+  .notepad-editor-content { padding: 28px 20px 120px; }
 }

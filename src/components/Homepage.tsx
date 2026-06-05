@@ -62,8 +62,8 @@ export const Homepage: React.FC<HomepageProps> = ({ onCreateNote, onOpenNote, on
   };
 
   const getPreviewText = (content: string) => {
-    // Remove HTML tags and get first 100 characters
-    const plainText = content.replace(/<[^>]*>/g, '').trim();
+    // Replace tags with spaces (so adjacent blocks don't run together), then collapse
+    const plainText = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     return plainText.length > 100 ? plainText.substring(0, 100) + '...' : plainText;
   };
 
@@ -108,15 +108,23 @@ export const Homepage: React.FC<HomepageProps> = ({ onCreateNote, onOpenNote, on
       {/* Notes List */}
       <div className="notes-container">
         {filteredNotes.length === 0 ? (
-          <div className="empty-state">
-            <FileText size={48} className="empty-icon" />
-            <h3>No notes yet</h3>
-            <p>Create your first meeting note to get started with transcription.</p>
-            <button className="create-first-note-button" onClick={onCreateNote}>
-              <Plus size={16} />
-              Create First Note
-            </button>
-          </div>
+          searchQuery ? (
+            <div className="empty-state">
+              <Search size={44} className="empty-icon" />
+              <h3>No matches</h3>
+              <p>Nothing matches &ldquo;{searchQuery}&rdquo;. Try a different search.</p>
+            </div>
+          ) : (
+            <div className="empty-state">
+              <FileText size={48} className="empty-icon" />
+              <h3>No notes yet</h3>
+              <p>Record a meeting and its transcript and notes will live here, on this machine.</p>
+              <button className="create-first-note-button" onClick={onCreateNote}>
+                <Plus size={16} />
+                New note
+              </button>
+            </div>
+          )
         ) : (
           <div className="notes-list">
             {filteredNotes.map((note) => (

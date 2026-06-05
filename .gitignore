@@ -97,3 +97,6 @@ out/
 
 # Impeccable design skill (project-local install; run `npx impeccable skills install`)
 .claude/skills/
+
+# Local design preview harness (links real CSS; not shipped)
+design-mocks/

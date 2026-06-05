@@ -1,4 +1,5 @@
 import React from 'react';
+import { Volume2, Mic } from 'lucide-react';
 
 interface AudioVisualizerProps {
   systemAudioLevel: number;
@@ -21,7 +22,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       {systemAudioActive && microphoneAudioActive ? (
         <div className="dual-audio-bars">
           <div className="audio-stream">
-            <div className="stream-label">🔊</div>
+            <Volume2 size={13} className="stream-label stream-system" />
             <div className="audio-bars">
               {[...Array(2)].map((_, i) => (
                 <div
@@ -36,7 +37,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
             </div>
           </div>
           <div className="audio-stream">
-            <div className="stream-label">🎤</div>
+            <Mic size={13} className="stream-label stream-mic" />
             <div className="audio-bars">
               {[...Array(2)].map((_, i) => (
                 <div
@@ -56,7 +57,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
         <div className="single-audio-bars">
           {systemAudioActive && !microphoneAudioActive ? (
             <div className="audio-stream">
-              <div className="stream-label">🔊</div>
+              <Volume2 size={13} className="stream-label stream-system" />
               <div className="audio-bars">
                 {[...Array(4)].map((_, i) => (
                   <div
@@ -72,7 +73,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
             </div>
           ) : microphoneAudioActive && !systemAudioActive ? (
             <div className="audio-stream">
-              <div className="stream-label">🎤</div>
+              <Mic size={13} className="stream-label stream-mic" />
               <div className="audio-bars">
                 {[...Array(4)].map((_, i) => (
                   <div

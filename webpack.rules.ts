@@ -28,4 +28,12 @@ export const rules: Required<ModuleOptions>['rules'] = [
       },
     },
   },
+  // Bundle self-hosted fonts referenced from CSS via url(...)
+  {
+    test: /\.(woff2?|ttf|otf|eot)$/,
+    type: 'asset/resource',
+    generator: {
+      filename: 'fonts/[name].[contenthash][ext]',
+    },
+  },
 ];

@@ -4,29 +4,30 @@
     <meta charset="UTF-8" />
     <title>Transcriper</title>
     <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval';" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-      /* Prevent flash of unstyled content */
+      /* Prevent flash of unstyled content — match the app's plum background */
       body {
         margin: 0;
         padding: 0;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-        background: #fafafa;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #29232f;
+        color: #a99eb8;
         overflow: hidden;
       }
-      
+
       #root {
         height: 100vh;
         width: 100vw;
       }
-      
+
       /* Loading state */
       .loading {
         display: flex;
         align-items: center;
         justify-content: center;
         height: 100vh;
-        color: #666;
+        font-size: 14px;
       }
     </style>
   </head>
