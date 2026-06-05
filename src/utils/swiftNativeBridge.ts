@@ -38,6 +38,45 @@ export class SwiftNativeBridge {
   private static transcriper_get_available_models: TranscriperGetAvailableModels | null = null;
   private static transcriper_cleanup: TranscriperCleanup | null = null;
 
+  // Serializes native calls. The Swift side keeps a single shared bridge instance
+  // (and an `isProcessing` guard), so overlapping calls must not run concurrently.
+  // Now that calls go through worker threads, the main thread could otherwise
+  // dispatch a second call before the first finishes — this chain prevents that.
+  private static nativeQueue: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Run a task once any previously queued native call has settled, regardless of
+   * its outcome. Returns the task's own promise so callers see its real result.
+   */
+  private static serialize<T>(task: () => Promise<T>): Promise<T> {
+    const run = SwiftNativeBridge.nativeQueue.then(task, task);
+    SwiftNativeBridge.nativeQueue = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  /**
+   * Invoke a koffi-registered native function on a libuv worker thread instead of
+   * blocking the Electron main-process event loop. Transcription and model loading
+   * can take many seconds; running them synchronously freezes the entire UI.
+   * Output (`_Out_`) buffers are caller-allocated and decoded after the call
+   * resolves, exactly as in the previous synchronous path.
+   */
+  private static callNativeAsync(fn: unknown, args: unknown[]): Promise<number> {
+    return new Promise<number>((resolve, reject) => {
+      try {
+        (fn as { async: (...a: unknown[]) => void }).async(
+          ...args,
+          (err: Error | null, result: number) => {
+            if (err) reject(err);
+            else resolve(result);
+          }
+        );
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+  }
+
   private static loadLibrary(): void {
     if (SwiftNativeBridge.lib) return;
 
@@ -153,7 +192,9 @@ export class SwiftNativeBridge {
       return { success: true };
     }
 
-    const result = SwiftNativeBridge.transcriper_initialize!();
+    const result = await SwiftNativeBridge.serialize(() =>
+      SwiftNativeBridge.callNativeAsync(SwiftNativeBridge.transcriper_initialize, [])
+    );
     SwiftNativeBridge.isInitialized = result === 1;
 
     return {
@@ -173,10 +214,12 @@ export class SwiftNativeBridge {
     }
 
     const resultBuffer = koffi.alloc('char', SwiftNativeBridge.BUFFER_SIZE);
-    const resultLength = SwiftNativeBridge.transcriper_process_audio_file!(
-      filePath,
-      resultBuffer,
-      SwiftNativeBridge.BUFFER_SIZE
+    const resultLength = await SwiftNativeBridge.serialize(() =>
+      SwiftNativeBridge.callNativeAsync(SwiftNativeBridge.transcriper_process_audio_file, [
+        filePath,
+        resultBuffer,
+        SwiftNativeBridge.BUFFER_SIZE
+      ])
     );
 
     if (resultLength <= 0) {
@@ -215,13 +258,15 @@ export class SwiftNativeBridge {
     const resultBuffer = koffi.alloc('char', SwiftNativeBridge.BUFFER_SIZE);
 
     // Koffi can handle Float32Array directly as pointer argument
-    const resultLength = SwiftNativeBridge.transcriper_process_audio_buffer!(
-      audioData,
-      audioData.length,
-      sampleRate,
-      channels,
-      resultBuffer,
-      SwiftNativeBridge.BUFFER_SIZE
+    const resultLength = await SwiftNativeBridge.serialize(() =>
+      SwiftNativeBridge.callNativeAsync(SwiftNativeBridge.transcriper_process_audio_buffer, [
+        audioData,
+        audioData.length,
+        sampleRate,
+        channels,
+        resultBuffer,
+        SwiftNativeBridge.BUFFER_SIZE
+      ])
     );
 
     if (resultLength <= 0) {
@@ -258,9 +303,11 @@ export class SwiftNativeBridge {
     }
 
     const infoBuffer = koffi.alloc('char', SwiftNativeBridge.BUFFER_SIZE);
-    const resultLength = SwiftNativeBridge.transcriper_get_system_info!(
-      infoBuffer,
-      SwiftNativeBridge.BUFFER_SIZE
+    const resultLength = await SwiftNativeBridge.serialize(() =>
+      SwiftNativeBridge.callNativeAsync(SwiftNativeBridge.transcriper_get_system_info, [
+        infoBuffer,
+        SwiftNativeBridge.BUFFER_SIZE
+      ])
     );
 
     if (resultLength <= 0) {
@@ -297,9 +344,11 @@ export class SwiftNativeBridge {
     }
 
     const modelsBuffer = koffi.alloc('char', SwiftNativeBridge.BUFFER_SIZE);
-    const resultLength = SwiftNativeBridge.transcriper_get_available_models!(
-      modelsBuffer,
-      SwiftNativeBridge.BUFFER_SIZE
+    const resultLength = await SwiftNativeBridge.serialize(() =>
+      SwiftNativeBridge.callNativeAsync(SwiftNativeBridge.transcriper_get_available_models, [
+        modelsBuffer,
+        SwiftNativeBridge.BUFFER_SIZE
+      ])
     );
 
     if (resultLength <= 0) {
