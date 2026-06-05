@@ -1,0 +1,29 @@
+#!/bin/sh
+# Pre-commit hook: type-check and lint before allowing a commit.
+#
+# Enabled via `core.hooksPath` (set to .githooks by the "prepare" npm script,
+# which runs on `npm install`). To enable manually:
+#     git config core.hooksPath .githooks
+#
+# To bypass for a work-in-progress commit: `git commit --no-verify`.
+
+set -e
+
+echo "▶ pre-commit: typecheck (tsc --noEmit)"
+npm run --silent typecheck
+
+echo "▶ pre-commit: lint (eslint)"
+npm run --silent lint
+
+echo "✓ pre-commit checks passed"
+
+# Non-blocking nudge: if code/config changed but README.md wasn't touched,
+# remind to check whether the README needs updating. This never blocks a commit.
+staged=$(git diff --cached --name-only)
+if echo "$staged" | grep -qE '^(src/|package\.json$|forge\.config\.ts$|webpack\.)'; then
+  if ! echo "$staged" | grep -qiE 'readme'; then
+    echo "ℹ note: code changed but README.md isn't staged — worth a glance to see if the README needs updating (reminder only, not blocking)."
+  fi
+fi
+
+exit 0
