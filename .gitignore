@@ -94,3 +94,6 @@ out/
 
 # mockups
 *.png
+
+# Impeccable design skill (project-local install; run `npx impeccable skills install`)
+.claude/skills/
