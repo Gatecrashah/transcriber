@@ -22,6 +22,21 @@ interface SwiftProcessingResult {
   totalSpeakers?: number;
 }
 
+interface SwiftSystemInfo {
+  success: boolean;
+  whisperVersion?: string;
+  fluidAudioVersion?: string;
+  metalSupport?: boolean;
+  availableModels?: string[];
+  error?: string;
+}
+
+interface SwiftModelsResult {
+  success: boolean;
+  models?: Array<{ name: string; size: string; description: string }>;
+  error?: string;
+}
+
 
 /**
  * Native Audio Processor - TypeScript wrapper for Swift audio processing pipeline
@@ -86,15 +101,14 @@ export class NativeAudioProcessor {
     }
 
     const result = await SwiftProcessRunner.runCommand({
-      command: ['process', filePath],
-      parseResult: (output) => this.convertSwiftResultToTranscriptionResult(JSON.parse(output))
+      command: ['process', filePath]
     });
 
     if (!result.success) {
       throw new Error(result.error || 'Audio processing failed');
     }
 
-    return result.data;
+    return this.convertSwiftResultToTranscriptionResult(result.data as SwiftProcessingResult);
   }
 
   /**
@@ -118,45 +132,34 @@ export class NativeAudioProcessor {
       throw new Error(result.error || 'Native audio buffer processing failed');
     }
 
-    return this.convertSwiftResultToTranscriptionResult(result.data);
+    return this.convertSwiftResultToTranscriptionResult(result.data as SwiftProcessingResult);
   }
 
 
   /**
    * Get system information about the Swift processing pipeline
    */
-  public async getSystemInfo(): Promise<{
-    success: boolean;
-    whisperVersion?: string;
-    fluidAudioVersion?: string;
-    metalSupport?: boolean;
-    availableModels?: string[];
-    error?: string;
-  }> {
+  public async getSystemInfo(): Promise<SwiftSystemInfo> {
     const result = await SwiftProcessRunner.runCommand({
       command: ['system-info']
     });
 
-    return result.success ? result.data : { success: false, error: result.error };
+    return result.success
+      ? (result.data as SwiftSystemInfo)
+      : { success: false, error: result.error };
   }
 
   /**
    * Get available WhisperKit models
    */
-  public async getAvailableModels(): Promise<{
-    success: boolean;
-    models?: Array<{
-      name: string;
-      size: string;
-      description: string;
-    }>;
-    error?: string;
-  }> {
+  public async getAvailableModels(): Promise<SwiftModelsResult> {
     const result = await SwiftProcessRunner.runCommand({
       command: ['models']
     });
 
-    return result.success ? result.data : { success: false, error: result.error };
+    return result.success
+      ? (result.data as SwiftModelsResult)
+      : { success: false, error: result.error };
   }
 
 

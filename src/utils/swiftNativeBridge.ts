@@ -50,7 +50,7 @@ export class SwiftNativeBridge {
    */
   private static serialize<T>(task: () => Promise<T>): Promise<T> {
     const run = SwiftNativeBridge.nativeQueue.then(task, task);
-    SwiftNativeBridge.nativeQueue = run.then(() => undefined, () => undefined);
+    SwiftNativeBridge.nativeQueue = run.then(() => {}, () => {});
     return run;
   }
 

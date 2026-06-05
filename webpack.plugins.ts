@@ -1,11 +1,9 @@
-// Temporarily disable ForkTsCheckerWebpackPlugin to test if it's causing issues
-// import type IForkTsCheckerWebpackPlugin from 'fork-ts-checker-webpack-plugin';
+import ForkTsCheckerWebpackPlugin from 'fork-ts-checker-webpack-plugin';
 
-// // eslint-disable-next-line @typescript-eslint/no-var-requires
-// const ForkTsCheckerWebpackPlugin: typeof IForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
-
+// ts-loader runs with transpileOnly for speed; this plugin performs the actual
+// type-checking in a separate process and fails the build on type errors.
 export const plugins = [
-  // new ForkTsCheckerWebpackPlugin({
-  //   logger: 'webpack-infrastructure',
-  // }),
+  new ForkTsCheckerWebpackPlugin({
+    logger: 'webpack-infrastructure',
+  }),
 ];

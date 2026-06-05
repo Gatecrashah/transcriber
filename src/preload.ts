@@ -1,12 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { 
-  AudioInitializationResult, 
-  AudioDeviceResult, 
-  AudioRecordingResult, 
-  AudioLevelResult, 
-  AudioStatusResult, 
-  AudioSaveResult, 
-  DesktopSourcesResult 
+import type {
+  AudioInitializationResult,
+  AudioSaveResult,
+  DesktopSourcesResult
 } from './types/audio';
 import type { 
   TranscriptionResult, 
@@ -54,12 +50,6 @@ declare global {
     electronAPI: {
       audio: {
         initialize: () => Promise<AudioInitializationResult>;
-        getDevices: () => Promise<AudioDeviceResult>;
-        startRecording: () => Promise<AudioInitializationResult>;
-        startSystemCapture: () => Promise<AudioInitializationResult>;
-        stopRecording: () => Promise<AudioRecordingResult>;
-        getLevel: () => Promise<AudioLevelResult>;
-        isRecording: () => Promise<AudioStatusResult>;
         saveAudioFile: (audioData: ArrayBuffer) => Promise<AudioSaveResult>;
         processDirectly: (audioData: ArrayBuffer) => Promise<{
           success: boolean;
@@ -73,6 +63,11 @@ declare global {
           error?: string;
         }>;
         getDesktopSources: () => Promise<DesktopSourcesResult>;
+        requestSystemAudioPermission: () => Promise<{
+          success: boolean;
+          message?: string;
+          error?: string;
+        }>;
       };
       transcription: {
         checkInstallation: () => Promise<TranscriptionInstallationResult>;
