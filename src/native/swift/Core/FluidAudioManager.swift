@@ -60,11 +60,11 @@ public class FluidAudioManager: ObservableObject {
             if config.enableVAD {
                 print("🎙️ Initializing VAD Manager...")
                 let vadConfig = VadConfig(
-                    threshold: 0.25,  // Lower threshold for meeting/compressed audio (per Silero best practices)
-                    chunkSize: 512,  // 32ms @ 16kHz - optimal for Silero VAD
+                    threshold: 0.445,  // FluidAudio's validated value (98% accuracy on MUSAN)
+                    chunkSize: 512,  // 32ms @ 16kHz - required Silero VAD chunk size
                     sampleRate: config.sampleRate,
-                    adaptiveThreshold: false,  // Disable adaptive threshold for consistent detection
-                    enableSNRFiltering: false  // Disable SNR filtering to avoid false negatives on compressed audio
+                    adaptiveThreshold: false,  // Keep a fixed threshold for predictable behavior
+                    enableSNRFiltering: false  // Off: avoids false negatives on compressed meeting audio
                 )
                 
                 vadManager = VadManager(config: vadConfig)
@@ -72,20 +72,23 @@ public class FluidAudioManager: ObservableObject {
                 do {
                     try await vadManager?.initialize()
                     print("✅ VAD Manager initialized successfully")
-                    print("   Threshold: 0.25")
-                    print("   SNR filtering: disabled")
+                    print("   Threshold: \(vadConfig.threshold)")
+                    print("   SNR filtering: \(vadConfig.enableSNRFiltering ? "enabled" : "disabled")")
                     print("   Models loaded from: ~/Library/Application Support/FluidAudio/Models/")
-                    
-                    // Test VAD with a simple chunk to verify it's working
-                    let testChunk = Array(repeating: Float(0.1), count: 512)
-                    if let testResult = try? await vadManager?.processChunk(testChunk) {
-                        print("🔍 VAD test result: prob=\(testResult.probability), active=\(testResult.isVoiceActive)")
-                        if testResult.probability < 0.05 {
-                            print("⚠️ WARNING: Silero VAD Core ML model not functioning correctly")
-                            print("   Expected probability > 0.5 for test chunk, got \(testResult.probability)")
-                            print("   This is a known issue with the Core ML model compatibility")
-                            print("   Falling back to energy-based VAD for voice detection")
-                        }
+
+                    // Sanity check: confirm the CoreML VAD pipeline actually executes.
+                    // We deliberately do NOT assert a probability threshold here. Silero VAD
+                    // is stateful (STFT → encoder → RNN with a 4-frame temporal warm-up), so a
+                    // single isolated chunk — especially a non-speech constant/DC signal — will
+                    // legitimately produce a low probability. The previous "model not functioning"
+                    // warning was a false alarm caused by testing the model with input it should
+                    // reject. A genuine failure surfaces as a thrown error, which we handle below.
+                    let warmupChunk = Array(repeating: Float(0), count: vadConfig.chunkSize)
+                    let probe = try await vadManager?.processChunk(warmupChunk)
+                    if let probe = probe, probe.probability.isFinite {
+                        print("✅ Silero VAD CoreML pipeline verified (warm-up prob=\(String(format: "%.3f", probe.probability)))")
+                    } else {
+                        print("⚠️ VAD warm-up returned no usable result; energy-based detection will back it up")
                     }
                 } catch {
                     print("❌ VAD Manager initialization failed: \(error)")
@@ -253,80 +256,34 @@ public class FluidAudioManager: ObservableObject {
         
         // Use proper VadManager if available, otherwise fallback to energy-based
         if let vadManager = vadManager {
-            print("🔍 Using Silero VAD model (threshold: 0.25, SNR filtering: disabled)")
-            
-            // Process in chunks for better accuracy
-            let chunkSize = 512  // As per VAD config
-            var hasVoiceOverall = false
-            var totalConfidence: Float = 0
-            var chunksProcessed = 0
-            var voiceChunks = 0
-            
-            // Process audio in chunks
-            for i in stride(from: 0, to: processedSamples.count, by: chunkSize) {
-                let endIndex = min(i + chunkSize, processedSamples.count)
-                let chunk = Array(processedSamples[i..<endIndex])
-                
-                // Skip if chunk is too small (last chunk)
-                if chunk.count < chunkSize / 2 {
-                    continue
-                }
-                
-                // Pad last chunk if needed
-                let paddedChunk: [Float]
-                if chunk.count < chunkSize {
-                    paddedChunk = chunk + Array(repeating: 0, count: chunkSize - chunk.count)
-                } else {
-                    paddedChunk = chunk
-                }
-                
-                let vadResult = try await vadManager.processChunk(paddedChunk)
-                
-                // Debug first few chunks and any with significant probability
-                if chunksProcessed < 5 || vadResult.probability > 0.05 {
-                    let chunkMax = chunk.map { abs($0) }.max() ?? 0
-                    let chunkAvg = chunk.reduce(0) { $0 + abs($1) } / Float(chunk.count)
-                    // Also show first few samples of the chunk to debug
-                    if chunksProcessed == 0 {
-                        let firstFive = chunk.prefix(5).map { String(format: "%.4f", $0) }.joined(separator: ", ")
-                        print("   Chunk 0 first 5 samples: [\(firstFive)]")
-                    }
-                    print("   Chunk \(chunksProcessed): prob=\(String(format: "%.3f", vadResult.probability)), active=\(vadResult.isVoiceActive), max=\(String(format: "%.3f", chunkMax)), avg=\(String(format: "%.4f", chunkAvg))")
-                }
-                
-                if vadResult.isVoiceActive {
-                    hasVoiceOverall = true
-                    voiceChunks += 1
-                }
-                totalConfidence += vadResult.probability
-                chunksProcessed += 1
-            }
-            
-            let avgConfidence = totalConfidence / Float(chunksProcessed)
-            let voiceRatio = Float(voiceChunks) / Float(chunksProcessed)
-            
+            print("🔍 Using Silero VAD model")
+
+            // Use the library's stateful pipeline. processAudioFile() resets the RNN
+            // state and processes every 512-sample chunk in order, giving the model the
+            // temporal warm-up it needs — unlike a hand-rolled per-chunk loop.
+            let results = try await vadManager.processAudioFile(processedSamples)
+            let chunksProcessed = results.count
+            let voiceChunks = results.filter { $0.isVoiceActive }.count
+            let avgConfidence = chunksProcessed > 0
+                ? results.map { $0.probability }.reduce(0, +) / Float(chunksProcessed)
+                : 0
+            let voiceRatio = chunksProcessed > 0 ? Float(voiceChunks) / Float(chunksProcessed) : 0
+            var hasVoiceOverall = voiceChunks > 0
+
             print("📈 VAD Results:")
             print("   Chunks processed: \(chunksProcessed)")
             print("   Voice chunks: \(voiceChunks) (\(String(format: "%.1f%%", voiceRatio * 100)))")
             print("   Avg probability: \(String(format: "%.3f", avgConfidence))")
-            print("   Has voice: \(hasVoiceOverall)")
-            
-            // Check if VAD is malfunctioning (returning constant low probability)
-            // The Silero VAD Core ML model appears to have compatibility issues
-            if avgConfidence <= 0.04 && avgAmplitude > 0.01 {
-                print("⚠️ VAD Core ML model malfunction detected (constant prob ~0.039)")
-                print("   Using energy-based voice detection instead")
-                
-                // Use energy-based detection as fallback when VAD is broken
-                hasVoiceOverall = avgAmplitude > 0.015 && maxAmplitude > 0.1
-                print("   Energy-based result: \(hasVoiceOverall) (avg=\(String(format: "%.4f", avgAmplitude)), max=\(String(format: "%.4f", maxAmplitude)))")
-            }
-            // Override if we have good audio characteristics but low VAD confidence
-            else if !hasVoiceOverall && avgAmplitude > 0.02 && zeroCrossingRate > 0.01 {
-                print("⚠️ VAD missed speech - using energy-based override")
+            print("   Has voice (model): \(hasVoiceOverall)")
+
+            // Safety net: if the model finds no voice but the audio clearly carries
+            // energy and speech-like zero-crossings, proceed anyway rather than dropping
+            // a potentially valid recording.
+            if !hasVoiceOverall && avgAmplitude > 0.02 && zeroCrossingRate > 0.01 {
+                print("⚠️ Model reported no voice but audio has clear energy — overriding to voiced")
                 hasVoiceOverall = true
             }
-            
+
             return hasVoiceOverall
         } else {
             // Fallback to energy-based VAD if VadManager not initialized
